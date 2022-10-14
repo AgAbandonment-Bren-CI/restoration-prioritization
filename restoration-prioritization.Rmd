@@ -1,0 +1,25 @@
+---
+title: "Prioritization of cropland restoration"
+author: "Nick McManus"
+date: '2022-10-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(prioritizr)    # optimization software! 
+library(terra)         # for reading in and altering rasters
+library(tidyverse)     # always! 
+```
+
+## Read in data
+
+```{r}
+# read in the cropland abandonment
+ssp1_abandoned_crop <- rast("data/SSP1_abandoned_cropland_brazil.tif")
+ssp2_abandoned_crop <- rast("data/SSP2_abandoned_cropland_brazil.tif")
+ssp3_abandoned_crop <- rast("data/SSP3_abandoned_cropland_brazil.tif")
+ssp4_abandoned_crop <- rast("data/SSP4_abandoned_cropland_brazil.tif")
+ssp5_abandoned_crop <- rast("data/SSP5_abandoned_cropland_brazil.tif")
+```
+
