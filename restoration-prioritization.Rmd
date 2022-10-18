@@ -56,5 +56,9 @@ carbon_crop <- carbon %>%
   terra::project(y = crs(brazil))
 
 plot(carbon_crop)
+
+#export carbon_crop
+
+writeRaster(carbon_crop, "data/carbon_seq_rate_Brazil.tif")
 ```
 
