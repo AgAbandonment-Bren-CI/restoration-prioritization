@@ -16,8 +16,10 @@ library(rnaturalearth) # administrative boundaries data
 library(rnaturalearthdata)
 ```
 
-## Read in data
+## Read in data{.tabset}
 
+### Cropland Abandonment
+Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. This data was generated from code located in the `abandoned-cropland` repository.
 ```{r}
 # read in the cropland abandonment
 ssp1_abandoned_crop <- rast("data/inputs/SSP1_abandoned_cropland_brazil.tif")
@@ -25,13 +27,15 @@ ssp2_abandoned_crop <- rast("data/inputs/SSP2_abandoned_cropland_brazil.tif")
 ssp3_abandoned_crop <- rast("data/inputs/SSP3_abandoned_cropland_brazil.tif")
 ssp4_abandoned_crop <- rast("data/inputs/SSP4_abandoned_cropland_brazil.tif")
 ssp5_abandoned_crop <- rast("data/inputs/SSP5_abandoned_cropland_brazil.tif")
-
-# read in carbon layer
-carbon <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
 ```
 
+### Carbon sequestraion rates
+Read in global carbon sequestration layer. Data sources from XYZ.....
+
+After reading in the global layer, we will crop it to Brazil and save the outputs. 
 ```{r}
-plot(carbon)
+# read in carbon layer
+carbon <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
 
 # crop to Brazil
 brazil <- ne_countries(
@@ -62,3 +66,15 @@ plot(carbon_crop)
 writeRaster(carbon_crop, "data/outputs/carbon_seq_rate_Brazil.tif")
 ```
 
+
+### Biodiversity
+Read in biodiversity data. Info about the data and where it is from. 
+
+After reading in the global layer, we will crop it to Brazil and save the outputs. 
+
+### Cost Layer
+
+
+## Problem Formulations
+
+This is where we will start formulating the problem to be solved in prioritizr!
