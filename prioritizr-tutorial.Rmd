@@ -17,9 +17,10 @@ knitr::opts_chunk$set(echo = TRUE)
 # load packages
 library(prioritizrdata)
 library(prioritizr)
+library(sf)
+library(raster)
 library(vegan)
 library(cluster)
-library(gurobi)
 
 # load planning unit data
 data(tas_pu)
@@ -28,7 +29,7 @@ data(tas_pu)
 data(tas_features)
 ```
 
-The `tas_pu` object contains planning units represented as spatial polygons. This object has three columns that denote the following informaiton for each planning unit: a unique identifier (`id`), unimproved land value (`cost`), and current conservation status (`locked_in`). Planning units that have at least half of their area overlapping with existing prtected areas are denoted with a locked in value of 1; otherwise, they are denoted with a value of 0.  
+The `tas_pu` object contains planning units represented as spatial polygons. This object has three columns that denote the following information for each planning unit: a unique identifier (`id`), unimproved land value (`cost`), and current conservation status (`locked_in`). Planning units that have at least half of their area overlapping with existing protected areas are denoted with a locked in value of 1; otherwise, they are denoted with a value of 0.  
 
 Looking at the planning unit data, we can see that the units correspond to hexagonal land parcels. There is also a clear spatial pattern in the cost and conservation status. 
 
@@ -39,8 +40,7 @@ print(tas_pu)
 
 ```{r}
 # plot map of planning unit costs
-plot(st_as
-     _sf(tas_pu[, "cost"]), main = "Planning unit costs")
+plot(st_as_sf(tas_pu[, "cost"]), main = "Planning unit costs")
 ```
 
 ```{r}
@@ -192,7 +192,7 @@ plot(st_as_sf(irrep_s1[, "plot_total"]), main = "Overall importance")
 
 ## Portfolios
 
-Conservation planning exercises often involve generating multiple different prioritizations. This can help decision makers consider different options, and provide starting points for building consensus among stakeholders. To generate a range of different prioritizations given the same problem formulation, we can use portfolio functions. Here we will use the gap portfolio to generate 1000 solutions that are within 30% of optimality. Please note that you will need to have the Gurobi solver installed to use this specific portfolio. If you don’t have access to Gurobi, you could try using the shuffle portfolio instead (using the `add_shuffle_portfolio()` function).
+Conservation planning exercises often involve generating multiple different prioritizations. This can help decision makers consider different options, and provide starting points for building consensus among stakeholders. To generate a range of different prioritizations given the same problem formulation, we can use portfolio functions. Here we will use the gap portfolio to generate 1000 solutions that are within 30% of optimality. Please note that you will need to have the Gurobi solver installed to use this specific portfolio. If you don’t have access to Gurobi, you could try using the shuffle portfolio instead (using the `add_shuffle_portfolio()` function). 
 
 ```{r}
 # create new problem with a portfolio added to it
