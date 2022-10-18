@@ -72,6 +72,15 @@ Read in biodiversity data. Info about the data and where it is from.
 
 After reading in the global layer, we will crop it to Brazil and save the outputs. 
 
+```{r}
+#gonna do some stuff here!
+
+
+
+
+```
+
+
 ### Cost Layer
 
 
