@@ -20,14 +20,14 @@ library(rnaturalearthdata)
 
 ```{r}
 # read in the cropland abandonment
-ssp1_abandoned_crop <- rast("data/SSP1_abandoned_cropland_brazil.tif")
-ssp2_abandoned_crop <- rast("data/SSP2_abandoned_cropland_brazil.tif")
-ssp3_abandoned_crop <- rast("data/SSP3_abandoned_cropland_brazil.tif")
-ssp4_abandoned_crop <- rast("data/SSP4_abandoned_cropland_brazil.tif")
-ssp5_abandoned_crop <- rast("data/SSP5_abandoned_cropland_brazil.tif")
+ssp1_abandoned_crop <- rast("data/inputs/SSP1_abandoned_cropland_brazil.tif")
+ssp2_abandoned_crop <- rast("data/inputs/SSP2_abandoned_cropland_brazil.tif")
+ssp3_abandoned_crop <- rast("data/inputs/SSP3_abandoned_cropland_brazil.tif")
+ssp4_abandoned_crop <- rast("data/inputs/SSP4_abandoned_cropland_brazil.tif")
+ssp5_abandoned_crop <- rast("data/inputs/SSP5_abandoned_cropland_brazil.tif")
 
 # read in carbon layer
-carbon <- rast("data/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
+carbon <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
 ```
 
 ```{r}
@@ -59,6 +59,6 @@ plot(carbon_crop)
 
 #export carbon_crop
 
-writeRaster(carbon_crop, "data/carbon_seq_rate_Brazil.tif")
+writeRaster(carbon_crop, "data/outputs/carbon_seq_rate_Brazil.tif")
 ```
 
