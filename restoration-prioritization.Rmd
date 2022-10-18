@@ -74,6 +74,7 @@ After reading in the global layer, we will crop it to Brazil and save the output
 
 ### Cost Layer
 
+# bee boop bip bop cost cost cost
 
 ## Problem Formulations
 
