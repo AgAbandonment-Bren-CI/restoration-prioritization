@@ -9,6 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(prioritizr)    # optimization software! 
 library(terra)         # for reading in and altering rasters
+library(sf)
+library(raster)
 library(tidyverse)     # always! 
 ```
 
@@ -21,5 +23,15 @@ ssp2_abandoned_crop <- rast("data/SSP2_abandoned_cropland_brazil.tif")
 ssp3_abandoned_crop <- rast("data/SSP3_abandoned_cropland_brazil.tif")
 ssp4_abandoned_crop <- rast("data/SSP4_abandoned_cropland_brazil.tif")
 ssp5_abandoned_crop <- rast("data/SSP5_abandoned_cropland_brazil.tif")
+
+# read in carbon layer
+carbon <- rast("data/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
+```
+
+```{r}
+plot(carbon)
+
+#crop to Brazil
+
 ```
 
