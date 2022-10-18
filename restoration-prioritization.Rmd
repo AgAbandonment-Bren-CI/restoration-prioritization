@@ -11,7 +11,9 @@ library(prioritizr)    # optimization software!
 library(terra)         # for reading in and altering rasters
 library(sf)
 library(raster)
-library(tidyverse)     # always! 
+library(tidyverse)     # always!
+library(rnaturalearth) # administrative boundaries data
+library(rnaturalearthdata)
 ```
 
 ## Read in data
@@ -31,7 +33,28 @@ carbon <- rast("data/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.
 ```{r}
 plot(carbon)
 
-#crop to Brazil
+# crop to Brazil
+brazil <- ne_countries(
+  scale = "medium",
+  country = "Brazil",
+  returnclass = "sf") %>% 
+  dplyr::select(sovereignt)
 
+ggplot() +
+  geom_sf(data = brazil)
+
+# Transform Brazil to Carbon raster
+
+brazil_trans <- brazil %>% 
+  st_transform(crs = crs(carbon)) %>% 
+  vect()
+
+# Crop carbon data
+carbon_crop <- carbon %>% 
+  crop(brazil_trans) %>% 
+  mask(brazil_trans) %>% 
+  terra::project(y = crs(brazil))
+
+plot(carbon_crop)
 ```
 
