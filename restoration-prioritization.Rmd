@@ -33,37 +33,37 @@ ssp5_abandoned_crop <- rast("data/inputs/SSP5_abandoned_cropland_brazil.tif")
 Read in global carbon sequestration layer. Data sources from XYZ.....
 
 After reading in the global layer, we will crop it to Brazil and save the outputs. 
-```{r}
-# read in carbon layer
-carbon <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
+```{r, eval=FALSE}
+#NOTE: this code chunk defaults to not evaluate.
+#only needs to be run once and cropped raster is saved
 
-# crop to Brazil
+# read in carbon layer
+carbon_global <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
+
+# read in Brazil shape file from natural earth
 brazil <- ne_countries(
   scale = "medium",
   country = "Brazil",
   returnclass = "sf") %>% 
   dplyr::select(sovereignt)
 
-ggplot() +
-  geom_sf(data = brazil)
-
-# Transform Brazil to Carbon raster
-
+# transform Brazil coordinate reference system to carbon raster
+# quicker than transforming a global layer
 brazil_trans <- brazil %>% 
-  st_transform(crs = crs(carbon)) %>% 
+  st_transform(crs = crs(carbon_global)) %>% 
   vect()
 
-# Crop carbon data
-carbon_crop <- carbon %>% 
+# Crop carbon data to Brazil, then reproject back to crs of interest
+carbon_brazil <- carbon_global %>% 
   crop(brazil_trans) %>% 
   mask(brazil_trans) %>% 
   terra::project(y = crs(brazil))
 
-plot(carbon_crop)
+# test plot to visualize results
+plot(carbon_brazil)
 
-#export carbon_crop
-
-writeRaster(carbon_crop, "data/outputs/carbon_seq_rate_Brazil.tif")
+#export carbon_brazil as intermediate raster
+writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
 ```
 
 
@@ -73,11 +73,26 @@ Read in biodiversity data. Info about the data and where it is from.
 After reading in the global layer, we will crop it to Brazil and save the outputs. 
 
 ```{r}
-#gonna do some stuff here!
+#read in global biodiversity data
+biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif")
 
+# transform Brazil coordinate reference system to carbon raster
+# quicker than transforming a global layer
+brazil_bio <- brazil %>% 
+  st_transform(crs = crs(biodiversity_global)) %>% 
+  vect()
 
+# crop biodiversity layer to Brazil
+biodiversity_brazil <- biodiversity_global %>% 
+  crop(brazil_bio) %>% 
+  mask(brazil_bio) %>% 
+  terra::project(y=crs(brazil))
 
+# test plot to visualize results
+plot(biodiversity_brazil)
 
+#export biodiversity_brazil as intermediate raster
+writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
 ```
 
 
