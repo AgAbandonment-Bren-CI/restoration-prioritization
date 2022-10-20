@@ -64,15 +64,22 @@ plot(carbon_brazil)
 
 #export carbon_brazil as intermediate raster
 writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
+
+#-----------------------------------------------------------------------------
+# run below line of code just to read in layer if already created
+carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
 ```
 
 
 ### Biodiversity
 Read in biodiversity data. Info about the data and where it is from. 
 
-After reading in the global layer, we will crop it to Brazil and save the outputs. 
+After reading in the global layer, we will crop it to Brazil, resample to match the resolution of the planning units, and save the output raster. 
 
-```{r}
+```{r, eval=FALSE}
+#NOTE: this code chunk defaults to not evaluate.
+#only needs to be run once and then cropped raster is saved
+
 #read in global biodiversity data
 biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif")
 
@@ -83,7 +90,7 @@ brazil_bio <- brazil %>%
   vect()
 
 # crop biodiversity layer to Brazil
-biodiversity_brazil <- biodiversity_global %>% 
+biodiversity_crop <- biodiversity_global %>% 
   crop(brazil_bio) %>% 
   mask(brazil_bio) %>% 
   terra::project(y=crs(brazil))
@@ -93,13 +100,44 @@ plot(biodiversity_brazil)
 
 #export biodiversity_brazil as intermediate raster
 writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
+
+#-------------------------------------------------------------------------------------------------
+# run below line of code just to read in layer if already created
+biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.tif")
+```
+
+
+```{r}
+# change resolution of biodiversity layer (5km?) to match the planning unit resolution (1km)
+
+# resample the biodiversity layer to the abandoned cropland layer
+biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
 ```
 
 
 ### Cost Layer
 
-# bee boop bip bop cost cost cost
+
 
 ## Problem Formulations
 
 This is where we will start formulating the problem to be solved in prioritizr!
+```{r}
+problem(ssp1_abandoned_crop)
+
+
+```
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
