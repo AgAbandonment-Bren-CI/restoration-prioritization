@@ -118,7 +118,8 @@ biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop,
 ### Cost Layer
 
 ```{r}
-#new chunk
+#read in cost data
+cost <- read_csv("data/inputs/Brancalion Restoration Cost Data.csv")
 ```
 
 
