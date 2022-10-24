@@ -117,6 +117,9 @@ biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop,
 
 ### Cost Layer
 
+```{r}
+#new chunk
+```
 
 
 ## Problem Formulations
