@@ -11,12 +11,32 @@ library(prioritizr)    # optimization software!
 library(terra)         # for reading in and altering rasters
 library(sf)
 library(raster)
+library(geobr)         # geometries for Brazilian biomes
+library(ggplot2)       # visualize some outputs
 library(tidyverse)     # always!
 library(rnaturalearth) # administrative boundaries data
 library(rnaturalearthdata)
 ```
 
 ## Read in data{.tabset}
+
+### Biomes
+
+```{r}
+# read in biome boundaries from geobr package
+biomes <- read_biomes(
+  year = 2019,  #the most recent data available
+  simplified = FALSE   #full resolution for boundaries
+)
+
+biomes <- biomes[-7, ]  #remove coastal system biome
+
+# visualize biome boundaries to check
+ggplot()+
+  geom_sf(data = biomes, aes(fill = name_biome), color = "black", size = .15) +
+  theme_minimal()
+```
+
 
 ### Cropland Abandonment
 Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. This data was generated from code located in the `abandoned-cropland` repository.
