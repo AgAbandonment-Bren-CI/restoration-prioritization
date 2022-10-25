@@ -139,26 +139,11 @@ biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop,
 
 ```{r}
 #read in cost data
-cost <- read_csv("data/inputs/Brancalion Restoration Cost Data.csv") %>%
-  rast("data/inputs/Brancalion Restoration Cost Data.csv")
+cost <- read_csv("data/inputs/Brancalion Restoration Cost Data.csv")
 
-# read in Brazil shape file from natural earth
-brazil <- ne_countries(
-  scale = "medium",
-  country = "Brazil",
-  returnclass = "sf") %>% 
-  dplyr::select(sovereignt)
+# merge cost and biome data
 
-# transform Brazil coordinate reference system to cost raster
-# quicker than transforming a global layer
-brazil_trans2 <- brazil %>% 
-  st_transform(crs = crs(cost))
-
-# Crop carbon data to Brazil, then reproject back to crs of interest
-cost_brazil <- cost %>% 
-  crop(brazil_trans2) %>% 
-  mask(brazil_trans2) %>% 
-  terra::project(y = crs(brazil))
+ 
 ```
 
 
