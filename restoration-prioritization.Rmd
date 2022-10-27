@@ -156,7 +156,13 @@ problem(ssp1_abandoned_crop)
 
 ```
  
+## input cost layer with biomes joined
 
+```{r}
+# input cost-biome layer from Arc 
+
+cost_biome <- read_csv("data/inputs/brazil_biomes_cost.dbf")
+```
 
 
 
