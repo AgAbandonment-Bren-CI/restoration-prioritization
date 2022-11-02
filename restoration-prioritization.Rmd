@@ -135,15 +135,47 @@ biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.ti
 biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
 ```
 
+### Planning Units
+
+```{r}
+# read in planning units for SSP2
+ssp2_pu <- read_sf("data/inputs/ssp2_pu.shp") %>% 
+  clean_names() %>% 
+  
+  # only keep select columns of interest
+  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
+  
+  # rename some columns to make later merging easier
+  rename(id = target_fid,
+         biome_code = cd_bioma) %>%
+  
+  #remove pus that are located outside Brazil biome boundaries
+  filter(join_count != 0)
+```
+
+
 
 ### Cost Layer
 
 ```{r}
 #read in cost data
-cost <- read_csv("data/inputs/Nature Conservancy Cost Final.csv")
+costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>% 
+  clean_names()
 
-# merge cost and biome data
+## merge cost and biome data---------------------------------------------------
+# first, select the restoration method and land status you want to use
+# selecting only costs for conducting natural regeneration (CAD)
+costs_cnr <- costs %>% 
+  filter(restoration_method == "conducting_natural_regeneration") %>% 
+  filter(environmental_conditions == "CAD") %>% 
+  select(!c(id))  #remove id column
 
+
+# now merge the filtered cost with planning units
+ssp2_pu_costs <- ssp2_pu %>% 
+  full_join(costs_cnr, by = "biome_code") %>%             #joining objects by matching `biome_code` column values
+  relocate(geometry, .after = environmental_conditions)   #moves geometry column to end
+ #st_drop_geometry()   may want to just drop geometry altogether? 
  
 ```
 
@@ -157,60 +189,6 @@ problem(ssp1_abandoned_crop)
 
 ```
  
-## input cost layer with biomes joined
-
-```{r}
-# input cost-biome layer from Arc 
-
-cost_biome <- read_csv("data/inputs/lm_bioma_250_SpatialJoin_Cli1_TableToExcel.csv")
-```
-
-
-```{r}
-# read in planning units
-ssp2_biomes <- read_sf("data/inputs/ssp2_pu_biomes.shp") %>% 
-  clean_names() %>% 
-  
-  # only keep select columns of interest
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  rename(id = target_fid,
-         biome_code = cd_bioma) %>%
-  
-  #remove pus that are located outside Brazil
-  filter(join_count != 0)
-
-# read in cost
-costs <- read_csv("data/inputs/TNC_cost_biomes.csv") %>% 
-  clean_names()
-
-# select only costs for conducting natural regeneration (CAD)
-costs_cnr <- costs %>% 
-  filter(restoration_method == "conducting_natural_regeneration") %>% 
-  filter(environmental_conditions == "CAD") %>% 
-  select(!c(id))
-
-# join planning units with costs
-ssp2_pu_costs <- ssp2_biomes %>% 
-  full_join(costs_cnr, by = "biome_code") %>% 
-  relocate(geometry, .after = environmental_conditions) 
-```
-
-
-
-
-```{r}
-ssp2 <- read_sf("data/inputs/ssp2_pu.shp")  %>% 
-  clean_names() %>% 
-  
-  # only keep select columns of interest
-  select(join_count, target_fid, biome, cost_r, cost_usd, shape_area) %>% 
-  rename(id = target_fid) %>%
-  
-  #remove pus that are located outside Brazil
-  filter(join_count != 0)
-
-```
-
 
 
 
