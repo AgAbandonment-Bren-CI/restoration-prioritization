@@ -14,6 +14,7 @@ library(raster)
 library(geobr)         # geometries for Brazilian biomes
 library(ggplot2)       # visualize some outputs
 library(tidyverse)     # always!
+library(janitor)
 library(rnaturalearth) # administrative boundaries data
 library(rnaturalearthdata)
 ```
@@ -165,6 +166,50 @@ cost_biome <- read_csv("data/inputs/brazil_biomes_cost.dbf")
 ```
 
 
+```{r}
+# read in planning units
+ssp2_biomes <- read_sf("data/inputs/ssp2_pu_biomes.shp") %>% 
+  clean_names() %>% 
+  
+  # only keep select columns of interest
+  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
+  rename(id = target_fid,
+         biome_code = cd_bioma) %>%
+  
+  #remove pus that are located outside Brazil
+  filter(join_count != 0)
+
+# read in cost
+costs <- read_csv("data/inputs/TNC_cost_biomes.csv") %>% 
+  clean_names()
+
+# select only costs for conducting natural regeneration (CAD)
+costs_cnr <- costs %>% 
+  filter(restoration_method == "conducting_natural_regeneration") %>% 
+  filter(environmental_conditions == "CAD") %>% 
+  select(!c(id))
+
+# join planning units with costs
+ssp2_pu_costs <- ssp2_biomes %>% 
+  full_join(costs_cnr, by = "biome_code") %>% 
+  relocate(geometry, .after = environmental_conditions) 
+```
+
+
+
+
+```{r}
+ssp2 <- read_sf("data/inputs/ssp2_pu.shp")  %>% 
+  clean_names() %>% 
+  
+  # only keep select columns of interest
+  select(join_count, target_fid, biome, cost_r, cost_usd, shape_area) %>% 
+  rename(id = target_fid) %>%
+  
+  #remove pus that are located outside Brazil
+  filter(join_count != 0)
+
+```
 
 
 
