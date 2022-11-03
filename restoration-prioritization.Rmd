@@ -17,6 +17,7 @@ library(tidyverse)     # always!
 library(janitor)
 library(rnaturalearth) # administrative boundaries data
 library(rnaturalearthdata)
+library(googledrive)
 ```
 
 ## Read in data{.tabset}
