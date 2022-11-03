@@ -17,130 +17,16 @@ library(tidyverse)     # always!
 library(janitor)
 library(rnaturalearth) # administrative boundaries data
 library(rnaturalearthdata)
-library(googledrive)
 ```
 
 ## Read in data{.tabset}
 
-### Biomes
-
-```{r}
-# read in biome boundaries from geobr package
-biomes <- read_biomes(
-  year = 2019,  #the most recent data available
-  simplified = FALSE   #full resolution for boundaries
-)
-
-biomes <- biomes[-7, ]  #remove coastal system biome
-
-# visualize biome boundaries to check
-ggplot()+
-  geom_sf(data = biomes, aes(fill = name_biome), color = "black", size = .15) +
-  theme_minimal()
-```
-
-
-### Cropland Abandonment
-Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. This data was generated from code located in the `abandoned-cropland` repository.
-```{r}
-# read in the cropland abandonment
-ssp1_abandoned_crop <- rast("data/inputs/SSP1_abandoned_cropland_brazil.tif")
-ssp2_abandoned_crop <- rast("data/inputs/SSP2_abandoned_cropland_brazil.tif")
-ssp3_abandoned_crop <- rast("data/inputs/SSP3_abandoned_cropland_brazil.tif")
-ssp4_abandoned_crop <- rast("data/inputs/SSP4_abandoned_cropland_brazil.tif")
-ssp5_abandoned_crop <- rast("data/inputs/SSP5_abandoned_cropland_brazil.tif")
-```
-
-### Carbon sequestraion rates
-Read in global carbon sequestration layer. Data sources from XYZ.....
-
-After reading in the global layer, we will crop it to Brazil and save the outputs. 
-```{r, eval=FALSE}
-#NOTE: this code chunk defaults to not evaluate.
-#only needs to be run once and cropped raster is saved
-
-# read in carbon layer
-carbon_global <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
-
-# read in Brazil shape file from natural earth
-brazil <- ne_countries(
-  scale = "medium",
-  country = "Brazil",
-  returnclass = "sf") %>% 
-  dplyr::select(sovereignt)
-
-# transform Brazil coordinate reference system to carbon raster
-# quicker than transforming a global layer
-brazil_trans <- brazil %>% 
-  st_transform(crs = crs(carbon_global)) %>% 
-  vect()
-
-# Crop carbon data to Brazil, then reproject back to crs of interest
-carbon_brazil <- carbon_global %>% 
-  crop(brazil_trans) %>% 
-  mask(brazil_trans) %>% 
-  terra::project(y = crs(brazil))
-
-# test plot to visualize results
-plot(carbon_brazil)
-
-#export carbon_brazil as intermediate raster
-writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
-
-#-----------------------------------------------------------------------------
-# run below line of code just to read in layer if already created
-carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
-```
-
-
-### Biodiversity
-Read in biodiversity data. Info about the data and where it is from. 
-
-After reading in the global layer, we will crop it to Brazil, resample to match the resolution of the planning units, and save the output raster. 
-
-```{r, eval=FALSE}
-#NOTE: this code chunk defaults to not evaluate.
-#only needs to be run once and then cropped raster is saved
-
-#read in global biodiversity data
-biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif")
-
-# transform Brazil coordinate reference system to carbon raster
-# quicker than transforming a global layer
-brazil_bio <- brazil %>% 
-  st_transform(crs = crs(biodiversity_global)) %>% 
-  vect()
-
-# crop biodiversity layer to Brazil
-biodiversity_crop <- biodiversity_global %>% 
-  crop(brazil_bio) %>% 
-  mask(brazil_bio) %>% 
-  terra::project(y=crs(brazil))
-
-# test plot to visualize results
-plot(biodiversity_brazil)
-
-#export biodiversity_brazil as intermediate raster
-writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
-
-#-------------------------------------------------------------------------------------------------
-# run below line of code just to read in layer if already created
-biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.tif")
-```
-
-
-```{r}
-# change resolution of biodiversity layer (5km?) to match the planning unit resolution (1km)
-
-# resample the biodiversity layer to the abandoned cropland layer
-biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
-```
 
 ### Planning Units
 
 ```{r}
 # read in planning units for SSP1
-ssp1_pu <- read_sf("data/inputs/ssp1/ssp1_pu.shp") %>% 
+ssp1_pu <- st_read("data/inputs/ssp1/ssp1_pu.shp") %>% 
   clean_names() %>% 
   
   # only keep select columns of interest
@@ -189,6 +75,102 @@ ssp5_pu <- read_sf("data/inputs/ssp5/ssp5_pu.shp") %>%
          biome_code = cd_bioma,
          biome = bioma) %>%
   filter(join_count != 0)
+```
+
+
+### Cropland Abandonment
+Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. This data was generated from code located in the `abandoned-cropland` repository.
+- may delete this chunk later if no longer necessary
+```{r}
+# read in the cropland abandonment
+ssp1_abandoned_crop <- rast("data/inputs/SSP1_abandoned_cropland_brazil.tif")
+ssp2_abandoned_crop <- rast("data/inputs/SSP2_abandoned_cropland_brazil.tif")
+ssp3_abandoned_crop <- rast("data/inputs/SSP3_abandoned_cropland_brazil.tif")
+ssp4_abandoned_crop <- rast("data/inputs/SSP4_abandoned_cropland_brazil.tif")
+ssp5_abandoned_crop <- rast("data/inputs/SSP5_abandoned_cropland_brazil.tif")
+```
+
+
+### Biomes
+
+```{r}
+# read in biome boundaries from geobr package
+biomes <- read_biomes(
+  year = 2019,  #the most recent data available
+  simplified = FALSE   #full resolution for boundaries
+)
+
+biomes_vect <- biomes[-7, ] %>%  #remove coastal system biome
+  st_transform(crs = crs(ssp1_pu)) %>%  #change crs to WGS84 
+  vect()   #turn sf into vector so that it's easier to crop and mask with
+```
+
+
+
+### Carbon sequestraion rates
+Read in global carbon sequestration layer. Data sources from XYZ.....
+
+After reading in the global layer, we will crop it to Brazil and save the outputs. 
+```{r, eval=FALSE}
+#NOTE: this code chunk defaults to not evaluate.
+#only needs to be run once and cropped raster is saved
+
+# read in carbon layer
+carbon_global <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
+
+# crop carbon data to Brazil
+carbon_brazil <- carbon_global %>% 
+  crop(biomes_vect) %>% 
+  mask(biomes_vect)
+
+# test plot to visualize results
+plot(carbon_brazil)
+
+
+#export carbon_brazil as intermediate raster
+writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
+
+#-----------------------------------------------------------------------------
+# run below line of code just to read in layer if already created
+carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
+```
+
+
+### Biodiversity
+Read in biodiversity data. Info about the data and where it is from. 
+
+After reading in the global layer, we will crop it to Brazil, resample to match the resolution of the planning units, and save the output raster. 
+
+```{r, eval=FALSE}
+#NOTE: this code chunk defaults to not evaluate.
+#only needs to be run once and then cropped raster is saved
+
+#read in global biodiversity data
+biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif") %>% 
+  project( , y= "epsg:4326")
+
+# crop biodiversity layer to Brazil
+biodiversity_brazil <- biodiversity_global %>% 
+  crop(biomes_vect) %>% 
+  mask(biomes_vect) 
+
+# test plot to visualize results
+plot(biodiversity_brazil)
+
+#export biodiversity_brazil as intermediate raster
+writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
+
+#-------------------------------------------------------------------------------------------------
+# run below line of code just to read in layer if already created
+biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.tif")
+```
+
+
+```{r}
+# change resolution of biodiversity layer (5km?) to match the planning unit resolution (1km)
+
+# resample the biodiversity layer to the abandoned cropland layer
+biodiversity_brazil_resamp <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
 ```
 
 
@@ -244,7 +226,15 @@ ssp5_pu_costs <- ssp5_pu %>%
 
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
-problem(ssp1_abandoned_crop)
+problem_ssp1 <- problem(ssp1_pu_costs, 
+                        features = biodiversity_brazil, 
+                        cost_column = "cost_usd_ha") %>% 
+  add_min_set_objective() %>% 
+  add_boundary_penalties() %>%
+  add_relative_targets() %>% 
+  add_locked_in_constraints() %>% 
+  add_binary_decisions()
+
 
 
 ```
