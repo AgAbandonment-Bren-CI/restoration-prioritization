@@ -1,8 +1,15 @@
 ---
 title: "Prioritization of cropland restoration"
-authors: "Nick McManus and Michelle Geldin"
+authors: "Nickolas McManus and Michelle Geldin"
 date: '2022-10-13'
-output: html_document
+output: 
+ html_document: 
+    toc: yes
+    toc_float: yes
+    theme: cerulean
+    code_folding: hide
+    smooth_scroll: yes
+    collapsed: no
 ---
 
 ```{r setup, include=FALSE}
@@ -17,9 +24,36 @@ library(tidyverse)     # always!
 library(janitor)
 ```
 
-## Read in data{.tabset}
+## Overview
+Discuss overall purpose of this analysis. 
 
-### Planning Units
+
+
+## Read in data{.tabset}
+First we will read in all the data necessary for formulating and solving the prioritization problem. Broadly, this includes the planning units (locations of projected cropland abandonment), various features (benefits to biodiversity and carbon), and costs of restoration.
+
+
+
+### Cropland Abandonment (Rasters)
+Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. These rasters were generated from code located in the `abandoned-cropland` repository, which provides a detailed methodology. Pixel values range from 1 to 7 indicating the frequency of abandonment between 2020 and 2050; values of 1 indicate abandonment only occurred for a five year duration, while pixels with values of 7 were projected to be abandoned for all of 2020-2050.  
+
+Projections of land-use under different SSP scenarios were sourced from:
+- Chen, G., Li, X., & Liu, X. (2022). Global land projection based on plant functional types with a 1-km resolution under socio-climatic scenarios. Scientific Data, 9(1), 125. https://doi.org/10.1038/s41597-022-01208-6
+
+```{r}
+# read in the cropland abandonment
+ssp1_abandoned_crop <- rast("data/inputs/ssp1/SSP1_abandoned_cropland_brazil.tif")
+ssp2_abandoned_crop <- rast("data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif")
+ssp3_abandoned_crop <- rast("data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif")
+ssp4_abandoned_crop <- rast("data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif")
+ssp5_abandoned_crop <- rast("data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
+```
+
+
+### Planning Units (Shapefiles)
+These shapefiles were produced in ArcGIS Pro by polygonizing the above rasters and then spatially joining with Brazilian biome shapefile. Here we will read in the shapefiles and clean up their dataframe. 
+
+- *This section may or may not get deleted in future if we only need rasters for problem formulation*
 
 ```{r}
 # read in planning units for SSP1
@@ -75,21 +109,7 @@ ssp5_pu <- read_sf("data/inputs/ssp5/ssp5_pu.shp") %>%
 ```
 
 
-### Cropland Abandonment
-Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. This data was generated from code located in the `abandoned-cropland` repository.
-- may delete this chunk later if no longer necessary
-```{r}
-# read in the cropland abandonment
-ssp1_abandoned_crop <- rast("data/inputs/ssp1/SSP1_abandoned_cropland_brazil.tif")
-ssp2_abandoned_crop <- rast("data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif")
-ssp3_abandoned_crop <- rast("data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif")
-ssp4_abandoned_crop <- rast("data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif")
-ssp5_abandoned_crop <- rast("data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
-```
-
-
-### Biome boundaries
-
+### Brazilian Biomes
 The boundary information for Brazilian biomes is read-in using the geobr package. Biome polygons are sourced from the Brazilian Institute of Geography and Statistics (IBGE). This dataset uses 2019 IBGE data at scale 1:250.000.
 
 Source: https://www.ibge.gov.br/geociencias/cartas-e-mapas/informacoes-ambientais/15842-biomas.html?=&t=acesso-ao-produto
@@ -103,19 +123,18 @@ biomes <- read_biomes(
 
 #remove coastal system biome
 biomes_vect <- biomes[-7, ] %>%  
-  
   #change crs to match other rasters
   st_transform(crs = crs(ssp1_abandoned_crop)) %>%
-  
   #turn sf into vector so it's easier to crop and mask with
   vect()   
 ```
 
 
-### Carbon sequestraion rates
-Read in global carbon sequestration layer. Data sources from XYZ.....
+### Carbon
+This dataset, originally created by Cook-Patton et al. and updated by Global Forest Watch, estimates the rate of carbon sequestration in aboveground and belowground live biomass during the first 30 years of natural forest regeneration. Spatial sequestration estimates include all forest and savanna biomes in units of MgC/ha/yr at a ~1 km resolution. This carbon data is cropped, masked, and reprojected to match the spatial extent and resolution of other rasters used in the prioritization. 
 
-After reading in the global layer, we will crop it to Brazil and save the outputs. 
+Source: https://data.globalforestwatch.org/documents/gfw::carbon-accumulation-potential-from-natural-forest-regrowth-in-forest-and-savanna-biomes/about
+
 ```{r, eval=FALSE}
 #NOTE: this code chunk defaults to not evaluate.
 #only needs to be run once and cropped raster is saved
@@ -123,8 +142,8 @@ After reading in the global layer, we will crop it to Brazil and save the output
 # read in carbon layer
 carbon_global <- rast("data/inputs/sequestration_rate__mean__aboveground__full_extent__Mg_C_ha_yr.tif")
 
-#temporarily change biome crs to crop/mask carbon data
-#faster than changing crs of global raster
+#cannot crop/mask carbon data when biomes are different crs
+#change biome crs because it's faster than changing crs of global raster
 brazil_trans <- biomes_vect %>% 
   project(y = crs(carbon_global))
 
@@ -139,13 +158,17 @@ carbon_brazil <- carbon_global %>%
 # change resolution to match other rasters (1km)
 carbon_brazil <- resample(carbon_brazil, ssp1_abandoned_crop, method = "bilinear")
 
+# change the name saved within raster for easier recall
+# after stacking feature rasters
+names(carbon_brazil) <- "carbon_brazil"
+
 # test plot to visualize results
 plot(carbon_brazil)
 
 #export carbon_brazil as intermediate raster
 writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
 
-#-----------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # run below line of code just to read in layer if already created
 carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
 ```
@@ -178,19 +201,24 @@ biodiversity_brazil <- biodiversity_global %>%
 # change resolution of biodiversity layer (4.72km) to match other rasters (1km)
 biodiversity_brazil <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
 
+# change the name saved within raster for easier recall
+# after stacking feature rasters
+names(biodiversity_brazil) <- "biodiversity_brazil"
+
 # test plot to visualize results
 plot(biodiversity_brazil)
 
 #export biodiversity_brazil as intermediate raster
 writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
 
-#--------------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # run below line of code just to read in layer if already created
 biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.tif")
 ```
 
 
 ### Cost Layer
+The cost of restoration in Brazil differs with location (by biome), restoration method (six types), and environmental condition of land (favorable or unfavorable). These costs were sourced from a 2017 Nature Conservancy report, written by Rubens de Miranda Benini and Sergio Adeodato. 
 
 ```{r}
 #read in cost data
@@ -198,9 +226,23 @@ costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>%
   clean_names()
 ```
 
-#### Merge Cost and PU
 
-Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit
+## Prepare data for prioritization
+
+### Planning Units
+Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit.
+
+```{r}
+# merging costs with pu rasters by reassigning value of rasters
+
+
+```
+
+
+
+
+
+- *section may be removed if shapefiles no longer used*
 ```{r}
 # select the restoration method and land status you want to use
 
@@ -209,7 +251,6 @@ costs_cnr_cad <- costs %>%
   filter(restoration_method == "conducting_natural_regeneration") %>% 
   filter(environmental_conditions == "CAD") %>% 
   select(!c(id, biome))  #remove id and biome columns
-
 
 
 # now merge the filtered cost with planning units for each SSP
@@ -235,6 +276,26 @@ ssp5_pu_costs <- ssp5_pu %>%
   full_join(costs_cnr_cad, by = c("biome_code")) %>% 
   relocate(geometry, .after = environmental_conditions)  
 ```
+
+
+
+
+### Features
+To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
+
+```{r}
+# convert biodiversity and carbon layers from
+# terra "SpatRaster" format to raster "RasterLayer"
+biodiversity_brazil <- raster(biodiversity_brazil)
+carbon_brazil <- raster(carbon_brazil)
+
+# now stack the two rasters
+features <- stack(biodiversity_brazil, carbon_brazil)
+
+
+```
+
+
 
 
 ## Problem Formulations
