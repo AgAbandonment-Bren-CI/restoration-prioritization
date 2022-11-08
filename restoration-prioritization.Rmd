@@ -54,7 +54,7 @@ These shapefiles were produced in ArcGIS Pro by polygonizing the above rasters a
 
 - *This section may or may not get deleted in future if we only need rasters for problem formulation*
 
-```{r}
+```{r, eval=FALSE}
 # read in planning units for SSP1
 ssp1_pu <- st_read("data/inputs/ssp1/ssp1_pu.shp") %>% 
   clean_names() %>% 
@@ -216,10 +216,12 @@ After reading in the global layer, we will crop it to Brazil, resample to match 
 #read in global biodiversity data
 biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif")
 
+
 #temporarily change biome crs to crop/mask biodiversity data
 #faster than changing crs of global raster
 brazil_trans <- biomes_vect %>% 
   project(y = crs(biodiversity_global))
+
 
 # crop biodiversity layer to Brazil
 biodiversity_brazil <- biodiversity_global %>% 
@@ -228,8 +230,16 @@ biodiversity_brazil <- biodiversity_global %>%
   #change crs back to match other rasters
   terra::project(y = crs(biomes_vect))
 
+
 # change resolution of biodiversity layer (4.72km) to match other rasters (1km)
+# first use terra:disagg()
+biodiversity_brazil <- disagg(biodiversity_brazil, 
+                              fact = 5,              
+                              method = "bilinear")  
+# resample higher res biodiversity to ensure same res and geometries 
+# (fine-tuning the res)
 biodiversity_brazil <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
+
 
 # change the name saved within raster for easier recall
 # after stacking feature rasters
@@ -288,7 +298,8 @@ Decide on the restoration method and land status desired to analyze the cost, th
 
 ##Step 1: crop ssp1 layer by each biome to make 6 new rasters
 ssp1_amazon <- ssp1_abandoned_crop %>% 
-  crop(amazon)
+  crop(amazon) %>% 
+  mask(amazon)
 
 ssp1_caatinga <- ssp1_abandoned_crop %>% 
   crop(caatinga)
@@ -342,7 +353,12 @@ ssp1_abandoned_crop_cost <- ssp1_abandoned_crop_cost %>%
   crop(biomes_vect) %>% 
   mask(biomes_vect)
 
-ssp1_abandoned_crop_cost <- raster(ssp1_abandoned_crop_cost)
+# make sure extents match for priotizir problem
+ssp1_pu <- resample(ssp1_abandoned_crop_cost, ssp1_abandoned_crop, method = "near")
+
+# turn into prioritizr-friendly format
+ssp1_pu <- raster(ssp1_abandoned_crop_cost)
+
 ```
 
 
@@ -409,15 +425,16 @@ bio_carbon <- stack(biodiversity_brazil, carbon_brazil)
 
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
-problem_ssp1 <- problem(ssp1_abandoned_crop_cost, 
-                        bio_carbon) 
-  add_min_set_objective() %>% 
-  add_boundary_penalties() %>%
-  add_relative_targets() %>% 
-  add_locked_in_constraints() %>% 
-  add_binary_decisions()
+# test problem
+ssp1_abandoned_crop <- raster(ssp1_abandoned_crop)
+p1 <- problem(ssp1_abandoned_crop, bio_carbon) %>% 
+  add_min_set_objective()
 
+# print number of planning units
+number_of_planning_units(p1)
 
+# print number of features
+number_of_features(p1)
 
 ```
  
