@@ -297,24 +297,17 @@ Decide on the restoration method and land status desired to analyze the cost, th
 #Test with SSP1:
 
 ##Step 1: crop ssp1 layer by each biome to make 6 new rasters
-ssp1_amazon <- ssp1_abandoned_crop %>% 
-  crop(amazon) %>% 
-  mask(amazon)
+ssp1_amazon <- crop(ssp1_abandoned_crop, amazon, mask = TRUE, touches = TRUE)
 
-ssp1_caatinga <- ssp1_abandoned_crop %>% 
-  crop(caatinga)
+ssp1_caatinga <- crop(ssp1_abandoned_crop, caatinga, mask = TRUE, touches = TRUE)
 
-ssp1_cerrado <- ssp1_abandoned_crop %>% 
-  crop(cerrado)
+ssp1_cerrado <- crop(ssp1_abandoned_crop, cerrado, mask = TRUE, touches = TRUE)
 
-ssp1_atlantic_forest <- ssp1_abandoned_crop %>% 
-  crop(atlantic_forest)
+ssp1_atlantic_forest <- crop(ssp1_abandoned_crop, atlantic_forest, mask = TRUE, touches = TRUE)
 
-ssp1_pampa <- ssp1_abandoned_crop %>% 
-  crop(pampa)
+ssp1_pampa <- crop(ssp1_abandoned_crop, pampa, mask = TRUE, touches = TRUE)
 
-ssp1_pantanal <- ssp1_abandoned_crop %>% 
-  crop(pantanal)
+ssp1_pantanal <-crop(ssp1_abandoned_crop, pantanal, mask = TRUE, touches = TRUE)
 
 ##Step 2: unique costs for each biome based on what restoration method was selected
 cost_amazon <- costs_filtered$cost_r_ha[1] 
@@ -358,6 +351,8 @@ ssp1_pu <- resample(ssp1_abandoned_crop_cost, ssp1_abandoned_crop, method = "nea
 
 # turn into prioritizr-friendly format
 ssp1_pu <- raster(ssp1_abandoned_crop_cost)
+
+## try changing touches and masking within crop function to TRUE
 
 ```
 
