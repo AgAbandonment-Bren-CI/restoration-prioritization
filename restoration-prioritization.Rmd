@@ -14,7 +14,8 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(prioritizr)    # optimization software! 
+library(prioritizr)    # prioritization package 
+library(gurobi)        # optimizaiton software
 library(terra)         # for reading in and altering rasters
 library(sf)            
 library(raster)        # for formating rasters in prioritizr-friendly format
@@ -46,65 +47,6 @@ ssp2_abandoned_crop <- rast("data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif
 ssp3_abandoned_crop <- rast("data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif")
 ssp4_abandoned_crop <- rast("data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif")
 ssp5_abandoned_crop <- rast("data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
-```
-
-
-### Planning Units (Shapefiles)
-These shapefiles were produced in ArcGIS Pro by polygonizing the above rasters and then spatially joining with Brazilian biome shapefile. Here we will read in the shapefiles and clean up their dataframe. 
-
-- *This section may or may not get deleted in future if we only need rasters for problem formulation*
-
-```{r, eval=FALSE}
-# read in planning units for SSP1
-ssp1_pu <- st_read("data/inputs/ssp1/ssp1_pu.shp") %>% 
-  clean_names() %>% 
-  
-  # only keep select columns of interest
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  
-  # rename some columns to make later merging easier
-  rename(id = target_fid,
-         biome_code = cd_bioma,
-         biome = bioma) %>%
-  
-  #remove pus that are located outside Brazil biome boundaries
-  filter(join_count != 0)
-
-# read in planning units for SSP2 -------------------------------------------
-ssp2_pu <- read_sf("data/inputs/ssp2/ssp2_pu.shp") %>% 
-  clean_names() %>% 
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  rename(id = target_fid,
-         biome_code = cd_bioma,
-         biome = bioma) %>%
-  filter(join_count != 0)
-
-# read in planning units for SSP3 -------------------------------------------
-ssp3_pu <- read_sf("data/inputs/ssp3/ssp3_pu.shp") %>% 
-  clean_names() %>% 
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  rename(id = target_fid,
-         biome_code = cd_bioma,
-         biome = bioma) %>%
-  filter(join_count != 0)
-
-# read in planning units for SSP4 -------------------------------------------
-ssp4_pu <- read_sf("data/inputs/ssp4/ssp4_pu.shp") %>% 
-  clean_names() %>% 
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  rename(id = target_fid,
-         biome_code = cd_bioma,
-         biome = bioma) %>%
-  filter(join_count != 0)
-
-# read in planning units for SSP5 -------------------------------------------
-ssp5_pu <- read_sf("data/inputs/ssp5/ssp5_pu.shp") %>% 
-  clean_names() %>% 
-  select(join_count, target_fid, bioma, cd_bioma, shape_area) %>% 
-  rename(id = target_fid,
-         biome_code = cd_bioma,
-         biome = bioma) %>%
-  filter(join_count != 0)
 ```
 
 
@@ -281,120 +223,47 @@ costs_filtered <- costs %>%
   select(!c(id, biome))  #remove id and biome columns
 ```
 
+### Biomes
+Merge biomes with cost data then rasterize
+```{r}
+# first join with cost layer 
+biomes_cost <- biomes %>% 
+  full_join(costs_filtered, by = c("code_biome" = "biome_code"))
+
+# turn cost/biome data into a vector
+biomes_cost_vect <- biomes_cost[-7, ] %>%   #remove coastal system biome
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>%  #change crs to match other rasters
+  vect()  
+
+# turn vect into a raster
+biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect to rasterize
+                              y = ssp1_abandoned_crop,   #raster to provide crs and spatial extent
+                              field = "cost_r_ha")       #values for raster
+```
+
 
 ### Planning Units
 Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit.
 
 ```{r}
-# merging costs with pu rasters by reassigning value of rasters
+# mask the cost by biomes to abandoned cropland raster
+# this will isolate pixels of interest (planning units) with associated cost value
 
-#Steps:
-##1. crop ssp1 layer by individual biomes (turn 1 raster into 6)
-##2. reassign values within each biome to costs (can this be automatically pulled from csv??)
-##3. merge/mosaic rasters back together into one ssp raster with updated values
+ssp1_pu <- mask(biomes_cost_rast, ssp1_abandoned_crop)
+ssp1_pu <- raster(ssp1_pu)  # turn into prioritizr-friendly format
 
-#-------------------------------------------------------------------------------
-#Test with SSP1:
+ssp2_pu <- mask(biomes_cost_rast, ssp2_abandoned_crop)
+ssp2_pu <- raster(ssp2_pu)
 
-##Step 1: crop ssp1 layer by each biome to make 6 new rasters
-ssp1_amazon <- crop(ssp1_abandoned_crop, amazon, mask = TRUE, touches = TRUE)
+ssp3_pu <- mask(biomes_cost_rast, ssp3_abandoned_crop)
+ssp3_pu <- raster(ssp3_pu)
 
-ssp1_caatinga <- crop(ssp1_abandoned_crop, caatinga, mask = TRUE, touches = TRUE)
+ssp4_pu <- mask(biomes_cost_rast, ssp4_abandoned_crop)
+ssp4_pu <- raster(ssp4_pu)
 
-ssp1_cerrado <- crop(ssp1_abandoned_crop, cerrado, mask = TRUE, touches = TRUE)
-
-ssp1_atlantic_forest <- crop(ssp1_abandoned_crop, atlantic_forest, mask = TRUE, touches = TRUE)
-
-ssp1_pampa <- crop(ssp1_abandoned_crop, pampa, mask = TRUE, touches = TRUE)
-
-ssp1_pantanal <-crop(ssp1_abandoned_crop, pantanal, mask = TRUE, touches = TRUE)
-
-##Step 2: unique costs for each biome based on what restoration method was selected
-cost_amazon <- costs_filtered$cost_r_ha[1] 
-cost_caatinga <- costs_filtered$cost_r_ha[2]
-cost_cerrado <- costs_filtered$cost_r_ha[3]
-cost_atlantic_forest <- costs_filtered$cost_r_ha[4]
-cost_pampa <- costs_filtered$cost_r_ha[5]
-cost_pantanal <- costs_filtered$cost_r_ha[6]
-
-# reclassify biomes
-amazon_m <- matrix(data = c(1, 7, cost_amazon), ncol = 3, byrow = TRUE)
-ssp1_amazon <- classify(ssp1_amazon, amazon_m, include.lowest=TRUE)
-
-caatinga_m <- matrix(data = c(1, 7, cost_caatinga), ncol = 3, byrow = TRUE)
-ssp1_caatinga <- classify(ssp1_caatinga, caatinga_m, include.lowest=TRUE)
-
-cerrado_m <- matrix(data = c(1, 7, cost_cerrado), ncol = 3, byrow = TRUE)
-ssp1_cerrado <- classify(ssp1_cerrado, cerrado_m, include.lowest=TRUE)
-
-atlantic_forest_m <- matrix(data = c(1, 7, cost_atlantic_forest), ncol = 3, byrow = TRUE)
-ssp1_atlantic_forest <- classify(ssp1_atlantic_forest, atlantic_forest_m, include.lowest=TRUE)
-
-pampa_m <- matrix(data = c(1, 7, cost_pampa), ncol = 3, byrow = TRUE)
-ssp1_pampa <- classify(ssp1_pampa, pampa_m, include.lowest=TRUE)
-
-pantanal_m <- matrix(data = c(1, 7, cost_pantanal), ncol = 3, byrow = TRUE)
-ssp1_pantanal <- classify(ssp1_pantanal, pantanal_m, include.lowest=TRUE)
-
-##Step 3: Merge biome rasters back together
-# create SpatRaster collection of reclassified biomes
-ssp1_list <- sprc(ssp1_amazon, ssp1_caatinga, ssp1_cerrado, ssp1_atlantic_forest, ssp1_pampa, ssp1_pantanal)
-
-# merge back into one raster for Brazil
-ssp1_abandoned_crop_cost <- merge(ssp1_list) 
-ssp1_abandoned_crop_cost <- ssp1_abandoned_crop_cost %>%
-  crop(biomes_vect) %>% 
-  mask(biomes_vect)
-
-# make sure extents match for priotizir problem
-ssp1_pu <- resample(ssp1_abandoned_crop_cost, ssp1_abandoned_crop, method = "near")
-
-# turn into prioritizr-friendly format
-ssp1_pu <- raster(ssp1_abandoned_crop_cost)
-
-## try changing touches and masking within crop function to TRUE
-
+ssp5_pu <- mask(biomes_cost_rast, ssp5_abandoned_crop)
+ssp5_pu <- raster(ssp5_pu)
 ```
-
-
-
-
-
-- *section may be removed if shapefiles no longer used*
-```{r}
-# select the restoration method and land status you want to use
-
-# Looking at conducting natural regeneration and "unfavorable environmental conditions" (CAD)
-costs_filtered <- costs %>% 
-  filter(restoration_method == "conducting_natural_regeneration") %>% 
-  filter(environmental_conditions == "CAD") %>% 
-  select(!c(id, biome))  #remove id and biome columns
-
-
-# now merge the filtered cost with planning units for each SSP
-
-ssp1_pu_costs <- ssp1_pu %>% 
-  full_join(costs_cnr_cad, by = "biome_code") %>%  #merge objects
-  relocate(geometry, .after = environmental_conditions)    #moves geometry column to end
- #st_drop_geometry()   #may want to just drop geometry altogether? 
-
-ssp2_pu_costs <- ssp2_pu %>% 
-  full_join(costs_cnr_cad, by = c("biome_code")) %>% 
-  relocate(geometry, .after = environmental_conditions)   
-
-ssp3_pu_costs <- ssp3_pu %>% 
-  full_join(costs_cnr_cad, by = c("biome_code")) %>% 
-  relocate(geometry, .after = environmental_conditions)  
-
-ssp4_pu_costs <- ssp4_pu %>% 
-  full_join(costs_cnr_cad, by = c("biome_code")) %>% 
-  relocate(geometry, .after = environmental_conditions) 
-
-ssp5_pu_costs <- ssp5_pu %>% 
-  full_join(costs_cnr_cad, by = c("biome_code")) %>% 
-  relocate(geometry, .after = environmental_conditions)  
-```
-
 
 
 
@@ -409,10 +278,7 @@ carbon_brazil <- raster(carbon_brazil)
 
 # now stack the two rasters
 bio_carbon <- stack(biodiversity_brazil, carbon_brazil)
-
-
 ```
-
 
 
 
@@ -421,9 +287,27 @@ bio_carbon <- stack(biodiversity_brazil, carbon_brazil)
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
 # test problem
-ssp1_abandoned_crop <- raster(ssp1_abandoned_crop)
-p1 <- problem(ssp1_abandoned_crop, bio_carbon) %>% 
-  add_min_set_objective()
+p1 <- problem(ssp1_pu, bio_carbon) %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(0.1) %>% 
+  add_gurobi_solver(gap = 0)
+
+
+p2 <- problem(ssp2_pu, bio_carbon) %>% 
+  add_min_set_objective() 
+
+
+p3 <- problem(ssp3_pu, bio_carbon) %>% 
+  add_min_set_objective() 
+
+
+p4 <- problem(ssp4_pu, bio_carbon) %>% 
+  add_min_set_objective() 
+
+
+p5 <- problem(ssp5_pu, bio_carbon) %>% 
+  add_min_set_objective() 
+
 
 # print number of planning units
 number_of_planning_units(p1)
@@ -434,6 +318,12 @@ number_of_features(p1)
 ```
  
 
+
+## Problem Solving
+```{r}
+s1 <- solve(p1)
+
+```
 
 
 
