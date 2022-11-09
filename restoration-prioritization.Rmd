@@ -34,7 +34,7 @@ Discuss overall purpose of this analysis.
 First we will read in all the data necessary for formulating and solving the prioritization problem. Broadly, this includes the planning units (locations of projected cropland abandonment), various features (benefits to biodiversity and carbon), and costs of restoration.
 
 
-### Cropland Abandonment (Rasters)
+### Cropland Abandonment
 Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. These rasters were generated from code located in the `abandoned-cropland` repository, which provides a detailed methodology. Pixel values range from 1 to 7 indicating the frequency of abandonment between 2020 and 2050; values of 1 indicate abandonment only occurred for a five year duration, while pixels with values of 7 were projected to be abandoned for all of 2020-2050.  
 
 Projections of land-use under different SSP scenarios were sourced from:
@@ -210,12 +210,21 @@ costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>%
 ```
 
 
-## Prepare data for prioritization
+
+
+
+
+
+
+
+
+
+
+## Prep data for prioritization
 
 ### Cost
+Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter` lines of code. 
 ```{r}
-# select the restoration method and land status you want to use
-
 # Looking at conducting natural regeneration and "unfavorable environmental conditions" (CAD)
 costs_filtered <- costs %>% 
   filter(restoration_method == "conducting_natural_regeneration") %>% 
@@ -224,9 +233,9 @@ costs_filtered <- costs %>%
 ```
 
 ### Biomes
-Merge biomes with cost data then rasterize
+To properly assign costs to out planning units, we need to merge our biome data with the filtered cost data. This dataset will then be rasterized for the next step of finalizing our planning units. 
 ```{r}
-# first join with cost layer 
+# first join biomes with cost layer 
 biomes_cost <- biomes %>% 
   full_join(costs_filtered, by = c("code_biome" = "biome_code"))
 
@@ -236,8 +245,8 @@ biomes_cost_vect <- biomes_cost[-7, ] %>%   #remove coastal system biome
   vect()  
 
 # turn vect into a raster
-biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect to rasterize
-                              y = ssp1_abandoned_crop,   #raster to provide crs and spatial extent
+biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect file to rasterize
+                              y = ssp1_abandoned_crop,   #raster file to provide example crs and spatial extent
                               field = "cost_r_ha")       #values for raster
 ```
 
@@ -266,7 +275,6 @@ ssp5_pu <- raster(ssp5_pu)
 ```
 
 
-
 ### Features
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
 
@@ -277,8 +285,86 @@ biodiversity_brazil <- raster(biodiversity_brazil)
 carbon_brazil <- raster(carbon_brazil)
 
 # now stack the two rasters
-bio_carbon <- stack(biodiversity_brazil, carbon_brazil)
+features <- stack(biodiversity_brazil, carbon_brazil)
 ```
+
+
+
+
+
+
+
+Test code for cropping to one biome and getting problem to run
+```{r}
+#### TEST CODE -------------------------
+
+# create planning units just for amazon
+amazon_cost_rast <- crop(biomes_cost_rast, amazon, mask = TRUE, touches = FALSE) #crop to just amazon
+
+ssp1_abandoned_crop_amazon <- crop(ssp1_abandoned_crop, amazon, mask = TRUE, touches = FALSE)
+
+ssp1_pu_amazon <- mask(amazon_cost_rast, ssp1_abandoned_crop_amazon)
+#ssp1_pu_amazon <- raster(ssp1_pu_amazon)
+
+# crop biodiv and carbon to amazon
+biodiversity_amazon <- crop(biodiversity_brazil, amazon, mask = TRUE, touches = FALSE)
+carbon_amazon <- crop(carbon_brazil, amazon, mask = TRUE, touches = FALSE)
+
+# combine features into rasterStack
+biodiversity_amazon <- raster(biodiversity_amazon)
+carbon_amazon <- raster(carbon_amazon)
+feat_amazon <- stack(biodiversity_amazon, carbon_amazon)
+
+# problem
+p_test <- problem(ssp1_pu_amazon, feat_amazon) %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(0.1) %>% 
+  add_gurobi_solver(gap = 0.1)
+
+# solve
+s_test <- prioritizr::solve(p_test)
+
+## Still giving error "feature(s) with very high target(s) (> 1e+06), try re-scaling the feature data to avoid numerical issues (e.g., convert units from m^2 to km^2)"
+## Amazon still has 81,688,368 cells, so let's try looking at just pampa and see if that's under 1million pu
+
+# create planning units just for pampa
+pampa_cost_rast <- crop(biomes_cost_rast, pampa, mask = TRUE, touches = FALSE) #crop to just pampa
+
+ssp1_abandoned_crop_pampa <- crop(ssp1_abandoned_crop, pampa, mask = TRUE, touches = FALSE)
+
+ssp1_pu_pampa <- mask(pampa_cost_rast, ssp1_abandoned_crop_pampa)
+ssp1_pu_pampa <- raster(ssp1_pu_pampa)
+
+# crop biodiv and carbon to pampa
+biodiversity_pampa <- crop(biodiversity_brazil, pampa, mask = TRUE, touches = FALSE)
+carbon_pampa <- crop(carbon_brazil, pampa, mask = TRUE, touches = FALSE)
+
+# combine features into rasterStack
+biodiversity_pampa <- raster(biodiversity_pampa)
+carbon_pampa <- raster(carbon_pampa)
+feat_pampa <- stack(biodiversity_pampa, carbon_pampa)
+
+# problem
+p_test_pampa <- problem(ssp1_pu_pampa, feat_pampa) %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(0.1) %>% 
+  add_gurobi_solver(gap = 0.1)
+
+# solve
+s_test_pampa <- prioritizr::solve(p_test_pampa)
+
+
+## Pampa biome has 507,236 pus. Does start to run, but no solutions. 
+## Gives "Error in .local(a, b = b, ...) : no solution found (e.g., due to problem infeasibility or time limits)
+```
+
+
+
+
+
+
+
+
 
 
 
@@ -287,33 +373,38 @@ bio_carbon <- stack(biodiversity_brazil, carbon_brazil)
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
 # test problem
-p1 <- problem(ssp1_pu, bio_carbon) %>% 
+p1 <- problem(ssp1_pu, features) %>% 
   add_min_set_objective() %>% 
   add_relative_targets(0.1) %>% 
-  add_gurobi_solver(gap = 0)
-
-
-p2 <- problem(ssp2_pu, bio_carbon) %>% 
-  add_min_set_objective() 
-
-
-p3 <- problem(ssp3_pu, bio_carbon) %>% 
-  add_min_set_objective() 
-
-
-p4 <- problem(ssp4_pu, bio_carbon) %>% 
-  add_min_set_objective() 
-
-
-p5 <- problem(ssp5_pu, bio_carbon) %>% 
-  add_min_set_objective() 
-
+  add_gurobi_solver(gap = 0.1)
 
 # print number of planning units
 number_of_planning_units(p1)
 
 # print number of features
 number_of_features(p1)
+
+# check the forumulation of problem before trying to solve
+presolve_check(p1)
+
+
+
+
+# SSP2
+p2 <- problem(ssp2_pu, features) %>% 
+  add_min_set_objective() 
+
+# SSP3
+p3 <- problem(ssp3_pu, features) %>% 
+  add_min_set_objective() 
+
+# SSP4
+p4 <- problem(ssp4_pu, features) %>% 
+  add_min_set_objective() 
+
+# SSP5
+p5 <- problem(ssp5_pu, features) %>% 
+  add_min_set_objective() 
 
 ```
  
