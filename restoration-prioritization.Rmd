@@ -292,7 +292,7 @@ features <- stack(biodiversity_brazil, carbon_brazil)
 
 
 
-
+### Test code
 
 Test code for cropping to one biome and getting problem to run
 ```{r}
@@ -325,7 +325,7 @@ p_test <- problem(ssp1_pu_amazon, feat_amazon) %>%
 s_test <- prioritizr::solve(p_test)
 
 ## Still giving error "feature(s) with very high target(s) (> 1e+06), try re-scaling the feature data to avoid numerical issues (e.g., convert units from m^2 to km^2)"
-## Amazon still has 81,688,368 cells, so let's try looking at just pampa and see if that's under 1million pu
+## Amazon still has 8,168,368 cells, so let's try looking at just pampa and see if that's under 1million pu
 
 # create planning units just for pampa
 pampa_cost_rast <- crop(biomes_cost_rast, pampa, mask = TRUE, touches = FALSE) #crop to just pampa
@@ -344,15 +344,7 @@ biodiversity_pampa <- raster(biodiversity_pampa)
 carbon_pampa <- raster(carbon_pampa)
 feat_pampa <- stack(biodiversity_pampa, carbon_pampa)
 
-# problem
-p_test_pampa <- problem(ssp1_pu_pampa, feat_pampa) %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(0.1) %>% 
-  add_gurobi_solver(gap = 0.1)
-
-# solve
-s_test_pampa <- prioritizr::solve(p_test_pampa)
-
+  
 
 ## Pampa biome has 507,236 pus. Does start to run, but no solutions. 
 ## Gives "Error in .local(a, b = b, ...) : no solution found (e.g., due to problem infeasibility or time limits)
@@ -375,7 +367,7 @@ This is where we will start formulating the problem to be solved in prioritizr!
 # test problem
 p1 <- problem(ssp1_pu, features) %>% 
   add_min_set_objective() %>% 
-  add_relative_targets(0.1) %>% 
+  add_absolute_targets(10000) %>% 
   add_gurobi_solver(gap = 0.1)
 
 # print number of planning units
