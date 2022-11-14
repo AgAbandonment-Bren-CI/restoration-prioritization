@@ -16,13 +16,13 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(prioritizr)    # prioritization package 
 library(gurobi)        # optimizaiton software
+library(sf)            # associated with prioritizr
 library(terra)         # for reading in and altering rasters
-library(sf)            
 library(raster)        # for formating rasters in prioritizr-friendly format
-library(geobr)         # geometries for Brazilian biomes
+library(geobr)         # geometries for Brazilian boundaries
 library(ggplot2)       # visualize some outputs
 library(tidyverse)     # always!
-library(janitor)
+library(janitor)       # cleaning up dfs
 ```
 
 ## Overview
@@ -292,68 +292,6 @@ features <- stack(biodiversity_brazil, carbon_brazil)
 
 
 
-### Test code
-
-Test code for cropping to one biome and getting problem to run
-```{r}
-#### TEST CODE -------------------------
-
-# create planning units just for amazon
-amazon_cost_rast <- crop(biomes_cost_rast, amazon, mask = TRUE, touches = FALSE) #crop to just amazon
-
-ssp1_abandoned_crop_amazon <- crop(ssp1_abandoned_crop, amazon, mask = TRUE, touches = FALSE)
-
-ssp1_pu_amazon <- mask(amazon_cost_rast, ssp1_abandoned_crop_amazon)
-#ssp1_pu_amazon <- raster(ssp1_pu_amazon)
-
-# crop biodiv and carbon to amazon
-biodiversity_amazon <- crop(biodiversity_brazil, amazon, mask = TRUE, touches = FALSE)
-carbon_amazon <- crop(carbon_brazil, amazon, mask = TRUE, touches = FALSE)
-
-# combine features into rasterStack
-biodiversity_amazon <- raster(biodiversity_amazon)
-carbon_amazon <- raster(carbon_amazon)
-feat_amazon <- stack(biodiversity_amazon, carbon_amazon)
-
-# problem
-p_test <- problem(ssp1_pu_amazon, feat_amazon) %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(0.1) %>% 
-  add_gurobi_solver(gap = 0.1)
-
-# solve
-s_test <- prioritizr::solve(p_test)
-
-## Still giving error "feature(s) with very high target(s) (> 1e+06), try re-scaling the feature data to avoid numerical issues (e.g., convert units from m^2 to km^2)"
-## Amazon still has 8,168,368 cells, so let's try looking at just pampa and see if that's under 1million pu
-
-# create planning units just for pampa
-pampa_cost_rast <- crop(biomes_cost_rast, pampa, mask = TRUE, touches = FALSE) #crop to just pampa
-
-ssp1_abandoned_crop_pampa <- crop(ssp1_abandoned_crop, pampa, mask = TRUE, touches = FALSE)
-
-ssp1_pu_pampa <- mask(pampa_cost_rast, ssp1_abandoned_crop_pampa)
-ssp1_pu_pampa <- raster(ssp1_pu_pampa)
-
-# crop biodiv and carbon to pampa
-biodiversity_pampa <- crop(biodiversity_brazil, pampa, mask = TRUE, touches = FALSE)
-carbon_pampa <- crop(carbon_brazil, pampa, mask = TRUE, touches = FALSE)
-
-# combine features into rasterStack
-biodiversity_pampa <- raster(biodiversity_pampa)
-carbon_pampa <- raster(carbon_pampa)
-feat_pampa <- stack(biodiversity_pampa, carbon_pampa)
-
-  
-
-## Pampa biome has 507,236 pus. Does start to run, but no solutions. 
-## Gives "Error in .local(a, b = b, ...) : no solution found (e.g., due to problem infeasibility or time limits)
-```
-
-
-
-
-
 
 
 
@@ -364,51 +302,123 @@ feat_pampa <- stack(biodiversity_pampa, carbon_pampa)
 
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
-# test problem
+# SSP1 --------------------------------------------
 p1 <- problem(ssp1_pu, features) %>% 
+  # minimize cost while ensuring all targets are met
   add_min_set_objective() %>% 
   add_absolute_targets(10000) %>% 
-  add_gurobi_solver(gap = 0.1)
-
-# print number of planning units
-number_of_planning_units(p1)
-
-# print number of features
-number_of_features(p1)
-
-# check the forumulation of problem before trying to solve
-presolve_check(p1)
+  add_gurobi_solver(gap = 0.05)
 
 
-
-
-# SSP2
+# SSP2 --------------------------------------------
 p2 <- problem(ssp2_pu, features) %>% 
-  add_min_set_objective() 
+  add_min_set_objective() %>% 
+  add_absolute_targets(10000) %>% 
+  add_gurobi_solver(gap = 0.05) 
 
-# SSP3
+
+# SSP3 --------------------------------------------
 p3 <- problem(ssp3_pu, features) %>% 
-  add_min_set_objective() 
+  add_min_set_objective() %>% 
+  add_absolute_targets(10000) %>% 
+  add_gurobi_solver(gap = 0.05)
 
-# SSP4
+
+# SSP4 --------------------------------------------
 p4 <- problem(ssp4_pu, features) %>% 
-  add_min_set_objective() 
+  add_min_set_objective() %>% 
+  add_absolute_targets(10000) %>% 
+  add_gurobi_solver(gap = 0.05)
 
-# SSP5
+
+# SSP5 --------------------------------------------
 p5 <- problem(ssp5_pu, features) %>% 
-  add_min_set_objective() 
+  add_min_set_objective() %>% 
+  add_absolute_targets(10000) %>% 
+  add_gurobi_solver(gap = 0.05) 
 
 ```
  
+
 
 
 ## Problem Solving
 ```{r}
 s1 <- solve(p1)
 
+s2 <- solve(p2)
+
+s3 <- solve(p3)
+
+s4 <- solve(p4)
+
+s5 <- solve(p5)
+
+
+# you can also stack solutions
+##   s <- stack(solve(p1), solve(p2), solve(p3), solve(p4), solve(p5))
+
 ```
 
 
+
+## Further analyses
+
+Here we'll explore the prioritizr solutions with further analysis. 
+
+```{r}
+# overlap between SSP solutions
+
+## convert RasterLayers back to SpatRast
+ssp1_solution <- rast(s1)
+
+ssp2_solution <- rast(s2)
+
+ssp3_solution <- rast(s3)
+
+ssp4_solution <- rast(s4)
+
+ssp5_solution <- rast(s5)
+
+
+## how many pus were selected in each? ----------------------------
+counts_ssp1 <- freq(ssp1_solution)
+counts_ssp2 <- freq(ssp2_solution)
+counts_ssp3 <- freq(ssp3_solution)
+counts_ssp4 <- freq(ssp4_solution)
+counts_ssp5 <- freq(ssp5_solution)
+
+# number pus not chosen
+not_picked_1 <- counts_ssp1[1, 3]
+not_picked_2 <- counts_ssp2[1, 3]
+not_picked_3 <- counts_ssp3[1, 3]
+not_picked_4 <- counts_ssp4[1, 3]
+not_picked_5 <- counts_ssp5[1, 3]
+
+# number pus chosen
+picked_1 <- counts_ssp1[2, 3]
+picked_2 <- counts_ssp2[2, 3]
+picked_3 <- counts_ssp3[2, 3]
+picked_4 <- counts_ssp4[2, 3]
+picked_5 <- counts_ssp5[2, 3]
+
+# percent pus chosen
+perc_picked_1 <- (picked_1/(picked_1 + not_picked_1)) * 100
+perc_picked_2 <- (picked_2/(picked_2 + not_picked_2)) * 100
+perc_picked_3 <- (picked_3/(picked_3 + not_picked_3)) * 100
+perc_picked_4 <- (picked_4/(picked_4 + not_picked_4)) * 100
+perc_picked_5 <- (picked_5/(picked_5 + not_picked_5)) * 100
+
+
+
+
+## Overlap between solutions ------------------------------------------
+total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
+
+plot(total_solution)
+
+#zonal stat of which biome they are located?
+```
 
 
 
