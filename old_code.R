@@ -87,3 +87,73 @@ ssp4_pu_costs <- ssp4_pu %>%
 ssp5_pu_costs <- ssp5_pu %>% 
   full_join(costs_filtered, by = c("biome_code")) %>% 
   relocate(geometry, .after = environmental_conditions) 
+
+
+
+
+
+
+
+
+
+
+#-------------------------------------------------------------------------------
+
+
+### Test code
+
+Test code for cropping to one biome and getting problem to run. Delete later
+```{r}
+#### TEST CODE -------------------------
+
+# create planning units just for amazon
+amazon_cost_rast <- crop(biomes_cost_rast, amazon, mask = TRUE, touches = FALSE) #crop to just amazon
+
+ssp1_abandoned_crop_amazon <- crop(ssp1_abandoned_crop, amazon, mask = TRUE, touches = FALSE)
+
+ssp1_pu_amazon <- mask(amazon_cost_rast, ssp1_abandoned_crop_amazon)
+#ssp1_pu_amazon <- raster(ssp1_pu_amazon)
+
+# crop biodiv and carbon to amazon
+biodiversity_amazon <- crop(biodiversity_brazil, amazon, mask = TRUE, touches = FALSE)
+carbon_amazon <- crop(carbon_brazil, amazon, mask = TRUE, touches = FALSE)
+
+# combine features into rasterStack
+biodiversity_amazon <- raster(biodiversity_amazon)
+carbon_amazon <- raster(carbon_amazon)
+feat_amazon <- stack(biodiversity_amazon, carbon_amazon)
+
+# problem
+p_test <- problem(ssp1_pu_amazon, feat_amazon) %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(0.1) %>% 
+  add_gurobi_solver(gap = 0.1)
+
+# solve
+s_test <- prioritizr::solve(p_test)
+
+## Still giving error "feature(s) with very high target(s) (> 1e+06), try re-scaling the feature data to avoid numerical issues (e.g., convert units from m^2 to km^2)"
+## Amazon still has 8,168,368 cells, so let's try looking at just pampa and see if that's under 1million pu
+
+# create planning units just for pampa
+pampa_cost_rast <- crop(biomes_cost_rast, pampa, mask = TRUE, touches = FALSE) #crop to just pampa
+
+ssp1_abandoned_crop_pampa <- crop(ssp1_abandoned_crop, pampa, mask = TRUE, touches = FALSE)
+
+ssp1_pu_pampa <- mask(pampa_cost_rast, ssp1_abandoned_crop_pampa)
+ssp1_pu_pampa <- raster(ssp1_pu_pampa)
+
+# crop biodiv and carbon to pampa
+biodiversity_pampa <- crop(biodiversity_brazil, pampa, mask = TRUE, touches = FALSE)
+carbon_pampa <- crop(carbon_brazil, pampa, mask = TRUE, touches = FALSE)
+
+# combine features into rasterStack
+biodiversity_pampa <- raster(biodiversity_pampa)
+carbon_pampa <- raster(carbon_pampa)
+feat_pampa <- stack(biodiversity_pampa, carbon_pampa)
+
+
+
+## Pampa biome has 507,236 pus. Does start to run, but no solutions. 
+## Gives "Error in .local(a, b = b, ...) : no solution found (e.g., due to problem infeasibility or time limits)
+```
