@@ -42,7 +42,7 @@ Projections of land-use under different SSP scenarios were sourced from:
 
 ```{r}
 # read in the cropland abandonment
-ssp1_abandoned_crop <- rast("data/inputs/ssp1/SSP1_abandoned_cropland_brazil.tif")
+ssp1_abandoned_crop <- rast("data/inputs/ssp1/SSP1_abandoned_cropland_brazil (2).tif")
 ssp2_abandoned_crop <- rast("data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif")
 ssp3_abandoned_crop <- rast("data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif")
 ssp4_abandoned_crop <- rast("data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif")
@@ -379,6 +379,14 @@ ssp3_solution <- rast(s3)
 ssp4_solution <- rast(s4)
 
 ssp5_solution <- rast(s5)
+
+
+## how many pus were available in original abandonment? -----------
+ab_pu_ssp1 <- sum(freq(ssp1_abandoned_crop)[3])
+ab_pu_ssp2 <- sum(freq(ssp2_abandoned_crop)[3])
+ab_pu_ssp3 <- sum(freq(ssp3_abandoned_crop)[3])
+ab_pu_ssp4 <- sum(freq(ssp4_abandoned_crop)[3])
+ab_pu_ssp5 <- sum(freq(ssp5_abandoned_crop)[3])
 
 
 ## how many pus were selected in each? ----------------------------
