@@ -111,7 +111,7 @@ Source: https://data.globalforestwatch.org/documents/gfw::carbon-accumulation-po
 #only needs to be run once and cropped raster is saved
 
 # read in carbon layer
-carbon_global <- rast("data/inputs/sequestration_rate__mean__aboveground__full_extent__Mg_C_ha_yr.tif")
+carbon_global <- rast("data/inputs/sequestration_rate_mean_aboveground_full_extent_Mg_C_ha_yr.tif")
 
 #cannot crop/mask carbon data when biomes are different crs
 #change biome crs because it's faster than changing crs of global raster
@@ -137,7 +137,7 @@ names(carbon_brazil) <- "carbon_brazil"
 plot(carbon_brazil)
 
 #export carbon_brazil as intermediate raster
-writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif")
+writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif", overwrite = TRUE)
 ```
 
 ```{r}
@@ -191,7 +191,7 @@ names(biodiversity_brazil) <- "biodiversity_brazil"
 plot(biodiversity_brazil)
 
 #export biodiversity_brazil as intermediate raster
-writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif")
+writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif", overwrite = TRUE)
 ```
 
 ```{r}
