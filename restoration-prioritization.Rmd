@@ -102,7 +102,7 @@ pantanal <- biomes %>%
 
 
 ### Carbon
-This dataset, originally created by Cook-Patton et al. and updated by Global Forest Watch, estimates the rate of carbon sequestration in aboveground and belowground live biomass during the first 30 years of natural forest regeneration. Spatial sequestration estimates include all forest and savanna biomes in units of MgC/ha/yr at a ~1 km resolution. This carbon data is cropped, masked, and reprojected to match the spatial extent and resolution of other rasters used in the prioritization. 
+This dataset, originally created by Cook-Patton et al. and updated by Global Forest Watch, estimates the rate of carbon sequestration in aboveground and belowground live biomass during the first 30 years of natural forest regeneration. Spatial sequestration estimates include all forest and savanna biomes in units of MgC/ha/yr at a ~1 km resolution. This carbon data is cropped, masked, and reprojected to match the spatial extent and resolution of other rasters used in the prioritization. Because sequestration data is mostly missing for the Pantanal biome in Brazil, it will be removed from this and all data in the analysis. 
 
 Source: https://data.globalforestwatch.org/documents/gfw::carbon-accumulation-potential-from-natural-forest-regrowth-in-forest-and-savanna-biomes/about
 
@@ -129,12 +129,16 @@ carbon_brazil <- carbon_global %>%
 # change resolution to match other rasters (1km)
 carbon_brazil <- resample(carbon_brazil, ssp1_abandoned_crop, method = "bilinear")
 
+# remove Panatnal biome from carbon layer
+carbon_brazil <- mask(carbon_brazil, pantanal, inverse = TRUE, updatevalue = NA)
+
 # change the name saved within raster for easier recall
 # after stacking feature rasters
 names(carbon_brazil) <- "carbon_brazil"
 
 # test plot to visualize results
 plot(carbon_brazil)
+plot(biomes_vect, add = TRUE)
 
 #export carbon_brazil as intermediate raster
 writeRaster(carbon_brazil, "data/outputs/carbon_seq_rate_Brazil.tif", overwrite = TRUE)
@@ -182,6 +186,8 @@ biodiversity_brazil <- disagg(biodiversity_brazil,
 # (fine-tuning the res)
 biodiversity_brazil <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
 
+# remove Pantanal biome from biodiversity layer
+biodiversity_brazil <- mask(biodiversity_brazil, pantanal, inverse = TRUE, updatevalue = NA)
 
 # change the name saved within raster for easier recall
 # after stacking feature rasters
@@ -189,6 +195,7 @@ names(biodiversity_brazil) <- "biodiversity_brazil"
 
 # test plot to visualize results
 plot(biodiversity_brazil)
+plot(biomes_vect, add = TRUE)
 
 #export biodiversity_brazil as intermediate raster
 writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif", overwrite = TRUE)
@@ -222,6 +229,8 @@ costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>%
 
 ## Prep data for prioritization
 
+Wrangle data into formats suitable for prioritizr inputs. 
+
 ### Cost
 Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter` lines of code. 
 ```{r}
@@ -229,6 +238,7 @@ Select the restoration method and environmental condition you want to investigat
 costs_filtered <- costs %>% 
   filter(restoration_method == "conducting_natural_regeneration") %>% 
   filter(environmental_conditions == "CAD") %>% 
+  filter(biome_code != 6) %>%   #remove pantanal data
   select(!c(id, biome))  #remove id and biome columns
 ```
 
@@ -248,6 +258,9 @@ biomes_cost_vect <- biomes_cost[-7, ] %>%   #remove coastal system biome
 biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect file to rasterize
                               y = ssp1_abandoned_crop,   #raster file to provide example crs and spatial extent
                               field = "cost_r_ha")       #values for raster
+
+# remove pantanal biome
+biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue = NA)
 ```
 
 
@@ -280,24 +293,27 @@ ssp5_pu <- raster(ssp5_pu)
 We want to break up biodiversity layer into quantiles, then keep only the top by making it binary. 
 Then we can set targets for meeting a percentage of the "available" biodiversity area
 ```{r}
-biodiversity_brazil_quant <- global(biodiversity_brazil, quantile, na.rm = TRUE)
+##biodiversity_brazil_quant <- global(biodiversity_brazil, probs=seq(0, 1, 0.25), na.rm = TRUE)
 
-plot(biodiversity_brazil_quant)
+biodiv_binary <- rast("data/inputs/BinaryBiodiversity.tif")
+
+biodiv_binary <- mask(biodiv_binary, biomes_vect)
+biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
+
+plot(biodiv_binary)
   
 ```
  
-
-
 
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
 ```{r}
 # convert biodiversity and carbon layers from
 # terra "SpatRaster" format to raster "RasterLayer"
-biodiversity_brazil <- raster(biodiversity_brazil)
+biodiv_binary <- raster(biodiv_binary)
 carbon_brazil <- raster(carbon_brazil)
 
 # now stack the two rasters
-features <- stack(biodiversity_brazil, carbon_brazil)
+features <- stack(biodiv_binary, carbon_brazil)
 ```
 
 
