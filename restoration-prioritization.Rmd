@@ -300,7 +300,11 @@ biodiv_binary <- rast("data/inputs/BinaryBiodiversity.tif")
 biodiv_binary <- mask(biodiv_binary, biomes_vect)
 biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
 
-plot(biodiv_binary)
+writeRaster(biodiv_binary, "data/outputs/biodiversity_binary_brazil.tif")
+
+#biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
+
+#plot(biodiv_binary)
   
 ```
  
@@ -314,13 +318,11 @@ carbon_brazil <- raster(carbon_brazil)
 
 # now stack the two rasters
 features <- stack(biodiv_binary, carbon_brazil)
+
+# set up targets
+## 60,000km for biodiversity and 20,000Mg carbon
+targets <- c(50000, 450000)
 ```
-
-
-
-
-
-
 
 
 
@@ -334,41 +336,39 @@ This is where we will start formulating the problem to be solved in prioritizr!
 p1 <- problem(ssp1_pu, features) %>% 
   # minimize cost while ensuring all targets are met
   add_min_set_objective() %>% 
-  add_absolute_targets(10000) %>% 
+  add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05)
 
 
 # SSP2 --------------------------------------------
 p2 <- problem(ssp2_pu, features) %>% 
   add_min_set_objective() %>% 
-  add_absolute_targets(10000) %>% 
+  add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05) 
 
 
 # SSP3 --------------------------------------------
 p3 <- problem(ssp3_pu, features) %>% 
   add_min_set_objective() %>% 
-  add_absolute_targets(10000) %>% 
+  add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05)
 
 
 # SSP4 --------------------------------------------
 p4 <- problem(ssp4_pu, features) %>% 
   add_min_set_objective() %>% 
-  add_absolute_targets(10000) %>% 
+  add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05)
 
 
 # SSP5 --------------------------------------------
 p5 <- problem(ssp5_pu, features) %>% 
   add_min_set_objective() %>% 
-  add_absolute_targets(10000) %>% 
+  add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05) 
 
 ```
  
-
-
 
 ## Problem Solving
 ```{r}
@@ -383,21 +383,7 @@ s4 <- solve(p4)
 s5 <- solve(p5)
 
 
-# you can also stack solutions
-##   s <- stack(solve(p1), solve(p2), solve(p3), solve(p4), solve(p5))
-
-```
-
-
-
-## Further analyses
-
-Here we'll explore the prioritizr solutions with further analysis. 
-
-```{r}
-# overlap between SSP solutions
-
-## convert RasterLayers back to SpatRast
+## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
 crs(ssp1_solution) = crs(ssp1_abandoned_crop)
 writeRaster(ssp1_solution, "data/outputs/ssp1_solution.tif", overwrite = TRUE)
@@ -417,7 +403,16 @@ writeRaster(ssp4_solution, "data/outputs/ssp4_solution.tif", overwrite = TRUE)
 ssp5_solution <- rast(s5)
 crs(ssp5_solution) = crs(ssp1_abandoned_crop)
 writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
+```
 
+
+
+## Further analyses
+
+Here we'll explore the prioritizr solutions with further analysis. 
+
+```{r}
+# overlap between SSP solutions
 
 ## how many pus were available in original abandonment? -----------
 ab_pu_ssp1 <- sum(freq(ssp1_abandoned_crop)[3])
@@ -462,9 +457,8 @@ perc_picked_5 <- (picked_5/(picked_5 + not_picked_5)) * 100
 total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
 
 writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
-
-#zonal stat of which biome they are located?
-zonal(total_solution, biomes_vect, fun = mean, as.raster = TRUE)
+freq(total_solution)
+plot(total_solution)
 ```
 
 
