@@ -382,6 +382,10 @@ s4 <- solve(p4)
 
 s5 <- solve(p5)
 
+s_total <- (solve(p1) + solve(p2) + solve(p3) + solve(p4) + solve(p5))
+
+ssp1_solution_total <- rast(s_total)
+crs(ssp1_solution_total) = crs(ssp1_abandoned_crop)
 
 ## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
@@ -459,6 +463,17 @@ total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution 
 writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
 freq(total_solution)
 plot(total_solution)
+
+
+
+# cost of final solution
+total_solution[total_solution != 5] <- NA
+total_cost <- mask(biomes_cost_rast, total_solution)
+total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) + 
+  (freq(total_cost)[2,2] * freq(total_cost)[2,3]) + 
+  (freq(total_cost)[3,2] * freq(total_cost)[3,3]) +
+  (freq(total_cost)[4,2] * freq(total_cost)[4,3]) +
+  (freq(total_cost)[5,2] * freq(total_cost)[5,3])
 ```
 
 
