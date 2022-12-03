@@ -410,7 +410,7 @@ writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
 
 Experimenting with boundary length modifiers:
 What if we do it with BLM of 50?
-```{r}
+```{r, eval= FALSE}
 # SSP1 --------------------------------------------
 p1_blm50 <- problem(ssp1_pu, features) %>% 
   # minimize cost while ensuring all targets are met
@@ -467,7 +467,7 @@ s5_blm50 <- solve(p5)
 
 ## Further analyses
 
-Here we'll explore the prioritizr solutions with further analysis. 
+Here we'll compare the prioritizr solutions with further analyses. 
 
 ```{r}
 # reclass the planning unit layers so each cell has a value of 1
