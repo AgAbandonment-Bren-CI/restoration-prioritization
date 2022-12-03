@@ -242,8 +242,7 @@ costs_filtered <- costs %>%
   select(!c(id, biome))  #remove id and biome columns
 ```
 
-### Biomes
-To properly assign costs to out planning units, we need to merge our biome data with the filtered cost data. This dataset will then be rasterized for the next step of finalizing our planning units. 
+To properly assign costs to our planning units, we need to merge our biome data with the filtered cost data. This dataset will then be rasterized for the next step of finalizing our planning units. 
 ```{r}
 # first join biomes with cost layer 
 biomes_cost <- biomes %>% 
@@ -302,7 +301,7 @@ biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
 
 writeRaster(biodiv_binary, "data/outputs/biodiversity_binary_brazil.tif")
 
-#biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
+biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
 
 #plot(biodiv_binary)
   
@@ -370,6 +369,7 @@ p5 <- problem(ssp5_pu, features) %>%
 ```
  
 
+
 ## Problem Solving
 ```{r}
 s1 <- solve(p1)
@@ -381,11 +381,6 @@ s3 <- solve(p3)
 s4 <- solve(p4)
 
 s5 <- solve(p5)
-
-s_total <- (solve(p1) + solve(p2) + solve(p3) + solve(p4) + solve(p5))
-
-ssp1_solution_total <- rast(s_total)
-crs(ssp1_solution_total) = crs(ssp1_abandoned_crop)
 
 ## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
@@ -407,8 +402,67 @@ writeRaster(ssp4_solution, "data/outputs/ssp4_solution.tif", overwrite = TRUE)
 ssp5_solution <- rast(s5)
 crs(ssp5_solution) = crs(ssp1_abandoned_crop)
 writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
+
+total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
+writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
 ```
 
+
+Experimenting with boundary length modifiers:
+What if we do it with BLM of 50?
+```{r}
+# SSP1 --------------------------------------------
+p1_blm50 <- problem(ssp1_pu, features) %>% 
+  # minimize cost while ensuring all targets are met
+  add_min_set_objective() %>% 
+  add_absolute_targets(targets) %>% 
+  add_boundary_penalties(penalty = 50) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+
+# SSP2 --------------------------------------------
+p2_blm50 <- problem(ssp2_pu, features) %>% 
+  add_min_set_objective() %>% 
+  add_absolute_targets(targets) %>% 
+  add_boundary_penalties(penalty = 50) %>% 
+  add_gurobi_solver(gap = 0.05) 
+
+
+# SSP3 --------------------------------------------
+p3_blm50 <- problem(ssp3_pu, features) %>% 
+  add_min_set_objective() %>% 
+  add_absolute_targets(targets) %>% 
+  add_boundary_penalties(penalty = 50) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+
+# SSP4 --------------------------------------------
+p4_blm50 <- problem(ssp4_pu, features) %>% 
+  add_min_set_objective() %>% 
+  add_absolute_targets(targets) %>% 
+  add_boundary_penalties(penalty = 50) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+
+# SSP5 --------------------------------------------
+p5_blm50 <- problem(ssp5_pu, features) %>% 
+  add_min_set_objective() %>% 
+  add_absolute_targets(targets) %>% 
+  add_boundary_penalties(penalty = 50) %>% 
+  add_gurobi_solver(gap = 0.05) 
+
+
+s1_blm50 <- solve(p1)
+
+s2_blm50 <- solve(p2)
+
+s3_blm50 <- solve(p3)
+
+s4_blm50 <- solve(p4)
+
+s5_blm50 <- solve(p5)
+
+```
 
 
 ## Further analyses
@@ -416,57 +470,52 @@ writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
 Here we'll explore the prioritizr solutions with further analysis. 
 
 ```{r}
-# overlap between SSP solutions
+# reclass the planning unit layers so each cell has a value of 1
+# easier for zonal stats
+df <- c(1, 3200, 1)
+m <- matrix(df, ncol = 3, byrow = TRUE)
 
-## how many pus were available in original abandonment? -----------
-ab_pu_ssp1 <- sum(freq(ssp1_abandoned_crop)[3])
-ab_pu_ssp2 <- sum(freq(ssp2_abandoned_crop)[3])
-ab_pu_ssp3 <- sum(freq(ssp3_abandoned_crop)[3])
-ab_pu_ssp4 <- sum(freq(ssp4_abandoned_crop)[3])
-ab_pu_ssp5 <- sum(freq(ssp5_abandoned_crop)[3])
+pu1 <- classify(ssp1_pu, m)
+pu2 <- classify(ssp2_pu, m)
+pu3 <- classify(ssp3_pu, m)
+pu4 <- classify(ssp4_pu, m)
+pu5 <- classify(ssp5_pu, m)
+
+# Counts ----------------------------------------------------------------------
+## How many pus were available in original abandonment?
+ab_pu_ssp1 <- sum(freq(pu1)[3])
+ab_pu_ssp2 <- sum(freq(pu2)[3])
+ab_pu_ssp3 <- sum(freq(pu3)[3])
+ab_pu_ssp4 <- sum(freq(pu4)[3])
+ab_pu_ssp5 <- sum(freq(pu5)[3])
 
 
-## how many pus were selected in each? ----------------------------
-counts_ssp1 <- freq(ssp1_solution)
-counts_ssp2 <- freq(ssp2_solution)
-counts_ssp3 <- freq(ssp3_solution)
-counts_ssp4 <- freq(ssp4_solution)
-counts_ssp5 <- freq(ssp5_solution)
+## how many pus were selected in each? 
+picked_1 <- (freq(ssp1_solution)[2, 3])
+picked_2 <- (freq(ssp2_solution)[2, 3])
+picked_3 <- (freq(ssp3_solution)[2, 3])
+picked_4 <- (freq(ssp4_solution)[2, 3])
+picked_5 <- (freq(ssp5_solution)[2, 3])
 
-# number pus not chosen
-not_picked_1 <- counts_ssp1[1, 3]
-not_picked_2 <- counts_ssp2[1, 3]
-not_picked_3 <- counts_ssp3[1, 3]
-not_picked_4 <- counts_ssp4[1, 3]
-not_picked_5 <- counts_ssp5[1, 3]
-
-# number pus chosen
-picked_1 <- counts_ssp1[2, 3]
-picked_2 <- counts_ssp2[2, 3]
-picked_3 <- counts_ssp3[2, 3]
-picked_4 <- counts_ssp4[2, 3]
-picked_5 <- counts_ssp5[2, 3]
-
-# percent pus chosen
-perc_picked_1 <- (picked_1/(picked_1 + not_picked_1)) * 100
-perc_picked_2 <- (picked_2/(picked_2 + not_picked_2)) * 100
-perc_picked_3 <- (picked_3/(picked_3 + not_picked_3)) * 100
-perc_picked_4 <- (picked_4/(picked_4 + not_picked_4)) * 100
-perc_picked_5 <- (picked_5/(picked_5 + not_picked_5)) * 100
+## percent pus chosen
+perc_picked_1 <- (picked_1/(ab_pu_ssp1)) * 100
+perc_picked_2 <- (picked_2/(ab_pu_ssp2)) * 100
+perc_picked_3 <- (picked_3/(ab_pu_ssp3)) * 100
+perc_picked_4 <- (picked_4/(ab_pu_ssp4)) * 100
+perc_picked_5 <- (picked_5/(ab_pu_ssp5)) * 100
 
 
 
 
-## Overlap between solutions ------------------------------------------
-total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
+# Costs ----------------------------------------------------------------------
+## return cost for each ssp 
+ssp1_cost <- eval_cost_summary(p1, s1)
+ssp2_cost <- eval_cost_summary(p2, s2)
+ssp3_cost <- eval_cost_summary(p3, s3)
+ssp4_cost <- eval_cost_summary(p4, s4)
+ssp5_cost <- eval_cost_summary(p5, s5)
 
-writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
-freq(total_solution)
-plot(total_solution)
-
-
-
-# cost of final solution
+## return cost of total solution
 total_solution[total_solution != 5] <- NA
 total_cost <- mask(biomes_cost_rast, total_solution)
 total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) + 
@@ -474,31 +523,59 @@ total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) +
   (freq(total_cost)[3,2] * freq(total_cost)[3,3]) +
   (freq(total_cost)[4,2] * freq(total_cost)[4,3]) +
   (freq(total_cost)[5,2] * freq(total_cost)[5,3])
+
+
+# Zonal Stats------------------------------------------------------------------
+
+## By Biome --------------------------------
+### make raster with biome codes as values
+biomes_rast <- rasterize(x = biomes_cost_vect,
+                         y = ssp1_abandoned_crop,
+                         field = "code_biome")       
+### remove pantanal biome
+biomes_rast <- mask(biomes_rast, pantanal, inverse = TRUE, updatevalue = NA)
+
+### find how many pus were present in each biome
+ssp1_zs_pu_biome <- zonal(pu1, biomes_rast, "sum", na.rm = TRUE)
+ssp2_zs_pu_biome <- zonal(pu2, biomes_rast, "sum", na.rm = TRUE)
+ssp3_zs_pu_biome <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
+ssp4_zs_pu_biome <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
+ssp5_zs_pu_biome <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
+
+### find how many pus were *prioritized* in each biome
+ssp1_zs_sol_biome <- zonal(ssp1_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp2_zs_sol_biome <- zonal(ssp2_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp3_zs_sol_biome <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp4_zs_sol_biome <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp5_zs_sol_biome <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
+
+
+## By State --------------------------------
+states <- read_state(year = 2020, simplified = FALSE)
+
+### create vector for states
+states_vect <- states %>%  
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()  
+
+### create raster for states
+states_rast <- rasterize(x = states_vect,
+                         y = ssp1_abandoned_crop,
+                         field = "code_state")  %>% 
+  mask(mask = pantanal, inverse = TRUE, updatevalue = NA)
+
+### find how many pus were present in each state
+ssp1_zs_pu_state <- zonal(pu1, states_rast, "sum", na.rm = TRUE)
+ssp2_zs_pu_state <- zonal(pu2, biomes_rast, "sum", na.rm = TRUE)
+ssp3_zs_pu_state <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
+ssp4_zs_pu_state <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
+ssp5_zs_pu_state <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
+
+### find how many pus were *prioritized* in each biome
+ssp1_zs_sol_state <- zonal(ssp1_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp2_zs_sol_state <- zonal(ssp2_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp3_zs_sol_state <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp4_zs_sol_state <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp5_zs_sol_state <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
 ```
-
-
-
-```{r}
-# fine overlap of planning units
-df <- c(1, 1,
-       2, 1, 
-       3, 1,
-       4, 1,
-       5, 1,
-       6, 1,
-       7, 1)
-
-m <- matrix(df, ncol = 2, byrow = TRUE)
-
-pu1 <- classify(ssp1_abandoned_crop, m)
-pu2 <- classify(ssp2_abandoned_crop, m)
-pu3 <- classify(ssp3_abandoned_crop, m)
-pu4 <- classify(ssp4_abandoned_crop, m)
-pu5 <- classify(ssp5_abandoned_crop, m)
-
-# only returns pixels where all are present
-all_pu <- (pu1 + pu2 + pu3 + pu4 + pu5)
-```
-
-
 
