@@ -233,6 +233,8 @@ Wrangle data into formats suitable for prioritizr inputs.
 
 ### Cost
 Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter` lines of code. 
+
+- NOTE: need to multiple cost by 100 and rerun all code to reflect cost per km rather than hectare
 ```{r}
 # Looking at conducting natural regeneration and "unfavorable environmental conditions" (CAD)
 costs_filtered <- costs %>% 
@@ -482,7 +484,7 @@ pu4 <- classify(ssp4_pu, m)
 pu5 <- classify(ssp5_pu, m)
 
 # Counts ----------------------------------------------------------------------
-## How many pus were available in original abandonment?
+## How many pus were available?
 ab_pu_ssp1 <- sum(freq(pu1)[3])
 ab_pu_ssp2 <- sum(freq(pu2)[3])
 ab_pu_ssp3 <- sum(freq(pu3)[3])
@@ -504,10 +506,16 @@ perc_picked_3 <- (picked_3/(ab_pu_ssp3)) * 100
 perc_picked_4 <- (picked_4/(ab_pu_ssp4)) * 100
 perc_picked_5 <- (picked_5/(ab_pu_ssp5)) * 100
 
+## how many pus overlapped in all five solutions? 
+total_pu <- sum(pu1, pu2, pu3, pu4, pu5)
+
+## how many pus were chosen in all five solutions?
+total_picked <- freq(total_solution)[6,3]
 
 
 
 # Costs ----------------------------------------------------------------------
+## NOTE: these all need to be multiplied by 100 to get cost/km2
 ## return cost for each ssp 
 ssp1_cost <- eval_cost_summary(p1, s1)
 ssp2_cost <- eval_cost_summary(p2, s2)
@@ -516,8 +524,12 @@ ssp4_cost <- eval_cost_summary(p4, s4)
 ssp5_cost <- eval_cost_summary(p5, s5)
 
 ## return cost of total solution
-total_solution[total_solution != 5] <- NA
-total_cost <- mask(biomes_cost_rast, total_solution)
+df2 <- c(0, 4, NA,
+         4, 6, 1)
+m2<- matrix(df2, ncol =3, byrow = TRUE)
+total_solution_overlap <- classify(total_solution, m2, include.lowest  = TRUE)
+
+total_cost <- mask(biomes_cost_rast, total_solution_overlap)
 total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) + 
   (freq(total_cost)[2,2] * freq(total_cost)[2,3]) + 
   (freq(total_cost)[3,2] * freq(total_cost)[3,3]) +
@@ -549,6 +561,11 @@ ssp3_zs_sol_biome <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_sol_biome <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_sol_biome <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
 
+### find overlap between each ssp
+total_pu[total_pu == 5] <- 1
+overlap_zs_pu_biome <- zonal(total_pu, biomes_rast, "sum", na.rm = TRUE)
+
+overlap_zs_sol_biome <- zonal(total_solution_overlap, biomes_rast,"sum", na.rm = TRUE)
 
 ## By State --------------------------------
 states <- read_state(year = 2020, simplified = FALSE)
