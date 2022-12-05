@@ -130,7 +130,7 @@ carbon_brazil <- carbon_global %>%
 carbon_brazil <- resample(carbon_brazil, ssp1_abandoned_crop, method = "bilinear")
 
 # remove Panatnal biome from carbon layer
-carbon_brazil <- mask(carbon_brazil, pantanal, inverse = TRUE, updatevalue = NA)
+carbon_brazil <- mask(carbon_brazil, pantanal, inverse = TRUE, updatevalue = NA, touches = TRUE)
 
 # change the name saved within raster for easier recall
 # after stacking feature rasters
@@ -289,6 +289,8 @@ ssp5_pu <- raster(ssp5_pu)
 ```
 
 
+
+
 ### Features
 
 We want to break up biodiversity layer into quantiles, then keep only the top by making it binary. 
@@ -296,12 +298,12 @@ Then we can set targets for meeting a percentage of the "available" biodiversity
 ```{r}
 ##biodiversity_brazil_quant <- global(biodiversity_brazil, probs=seq(0, 1, 0.25), na.rm = TRUE)
 
-biodiv_binary <- rast("data/inputs/BinaryBiodiversity.tif")
+#biodiv_binary <- rast("data/inputs/BinaryBiodiversity.tif")
 
-biodiv_binary <- mask(biodiv_binary, biomes_vect)
-biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
+#biodiv_binary <- mask(biodiv_binary, biomes_vect)
+#biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
 
-writeRaster(biodiv_binary, "data/outputs/biodiversity_binary_brazil.tif")
+#writeRaster(biodiv_binary, "data/outputs/biodiversity_binary_brazil.tif")
 
 biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
 
@@ -387,22 +389,27 @@ s5 <- solve(p5)
 ## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
 crs(ssp1_solution) = crs(ssp1_abandoned_crop)
+names(ssp1_solution) <- "ssp1_solution"
 writeRaster(ssp1_solution, "data/outputs/ssp1_solution.tif", overwrite = TRUE)
 
 ssp2_solution <- rast(s2)
 crs(ssp2_solution) = crs(ssp1_abandoned_crop)
+names(ssp2_solution) <- "ssp2_solution"
 writeRaster(ssp2_solution, "data/outputs/ssp2_solution.tif", overwrite = TRUE)
 
 ssp3_solution <- rast(s3)
 crs(ssp3_solution) = crs(ssp1_abandoned_crop)
+names(ssp3_solution) <- "ssp3_solution"
 writeRaster(ssp3_solution, "data/outputs/ssp3_solution.tif", overwrite = TRUE)
 
 ssp4_solution <- rast(s4)
 crs(ssp4_solution) = crs(ssp1_abandoned_crop)
+names(ssp4_solution) <- "ssp4_solution"
 writeRaster(ssp4_solution, "data/outputs/ssp4_solution.tif", overwrite = TRUE)
 
 ssp5_solution <- rast(s5)
 crs(ssp5_solution) = crs(ssp1_abandoned_crop)
+names(ssp5_solution) <- "ssp5_solution"
 writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
 
 total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
@@ -470,6 +477,9 @@ s5_blm50 <- solve(p5)
 ## Further analyses
 
 Here we'll compare the prioritizr solutions with further analyses. 
+Things to-do:
+- create nice table of results
+- update costs
 
 ```{r}
 # reclass the planning unit layers so each cell has a value of 1
@@ -477,11 +487,16 @@ Here we'll compare the prioritizr solutions with further analyses.
 df <- c(1, 3200, 1)
 m <- matrix(df, ncol = 3, byrow = TRUE)
 
-pu1 <- classify(ssp1_pu, m)
+pu1 <- classify(ssp1_pu, m) 
+names(pu1) <- "pu1"
 pu2 <- classify(ssp2_pu, m)
+names(pu2) <- "pu2"
 pu3 <- classify(ssp3_pu, m)
+names(pu3) <- "pu3"
 pu4 <- classify(ssp4_pu, m)
+names(pu4) <- "pu4"
 pu5 <- classify(ssp5_pu, m)
+names(pu5) <- "pu5"
 
 # Counts ----------------------------------------------------------------------
 ## How many pus were available?
@@ -543,7 +558,7 @@ total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) +
 ### make raster with biome codes as values
 biomes_rast <- rasterize(x = biomes_cost_vect,
                          y = ssp1_abandoned_crop,
-                         field = "code_biome")       
+                         field = "name_biome")       
 ### remove pantanal biome
 biomes_rast <- mask(biomes_rast, pantanal, inverse = TRUE, updatevalue = NA)
 
@@ -554,12 +569,25 @@ ssp3_zs_pu_biome <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_pu_biome <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_pu_biome <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
 
+### combine all the counts into one table
+counts_pu_biome <- full_join(ssp1_zs_pu_biome, ssp2_zs_pu_biome, by = "name_biome") %>% 
+  full_join(ssp3_zs_pu_biome, by = "name_biome") %>% 
+  full_join(ssp4_zs_pu_biome, by = "name_biome") %>% 
+  full_join(ssp5_zs_pu_biome, by = "name_biome")
+
 ### find how many pus were *prioritized* in each biome
 ssp1_zs_sol_biome <- zonal(ssp1_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp2_zs_sol_biome <- zonal(ssp2_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp3_zs_sol_biome <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_sol_biome <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_sol_biome <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
+
+### combine all the counts into one table
+counts_sol_state <- full_join(ssp1_zs_sol_biome, ssp2_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp3_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp4_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp5_zs_sol_biome, by = "name_biome")
+
 
 ### find overlap between each ssp
 total_pu[total_pu == 5] <- 1
@@ -578,21 +606,33 @@ states_vect <- states %>%
 ### create raster for states
 states_rast <- rasterize(x = states_vect,
                          y = ssp1_abandoned_crop,
-                         field = "code_state")  %>% 
+                         field = "name_state")  %>% 
   mask(mask = pantanal, inverse = TRUE, updatevalue = NA)
 
 ### find how many pus were present in each state
 ssp1_zs_pu_state <- zonal(pu1, states_rast, "sum", na.rm = TRUE)
-ssp2_zs_pu_state <- zonal(pu2, biomes_rast, "sum", na.rm = TRUE)
-ssp3_zs_pu_state <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
-ssp4_zs_pu_state <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
-ssp5_zs_pu_state <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
+ssp2_zs_pu_state <- zonal(pu2, states_rast, "sum", na.rm = TRUE)
+ssp3_zs_pu_state <- zonal(pu3, states_rast, "sum", na.rm = TRUE)
+ssp4_zs_pu_state <- zonal(pu4, states_rast, "sum", na.rm = TRUE)
+ssp5_zs_pu_state <- zonal(pu5, states_rast, "sum", na.rm = TRUE)
+
+### combine all the counts into one table
+counts_pu_state <- full_join(ssp1_zs_pu_state, ssp2_zs_pu_state, by = "name_state") %>% 
+  full_join(ssp3_zs_pu_state, by = "name_state") %>% 
+  full_join(ssp4_zs_pu_state, by = "name_state") %>% 
+  full_join(ssp5_zs_pu_state, by = "name_state")
 
 ### find how many pus were *prioritized* in each biome
-ssp1_zs_sol_state <- zonal(ssp1_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp2_zs_sol_state <- zonal(ssp2_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp3_zs_sol_state <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp4_zs_sol_state <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp5_zs_sol_state <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp1_zs_sol_state <- zonal(ssp1_solution, states_rast, "sum", na.rm = TRUE)
+ssp2_zs_sol_state <- zonal(ssp2_solution, states_rast, "sum", na.rm = TRUE)
+ssp3_zs_sol_state <- zonal(ssp3_solution, states_rast, "sum", na.rm = TRUE)
+ssp4_zs_sol_state <- zonal(ssp4_solution, states_rast, "sum", na.rm = TRUE)
+ssp5_zs_sol_state <- zonal(ssp5_solution, states_rast, "sum", na.rm = TRUE)
+
+### combine all the counts into one table
+counts_sol_state <- full_join(ssp1_zs_sol_state, ssp2_zs_sol_state, by = "name_state") %>% 
+  full_join(ssp3_zs_sol_state, by = "name_state") %>% 
+  full_join(ssp4_zs_sol_state, by = "name_state") %>% 
+  full_join(ssp5_zs_sol_state, by = "name_state")
 ```
 
