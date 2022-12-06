@@ -324,7 +324,7 @@ features <- stack(biodiv_binary, carbon_brazil)
 
 # set up targets
 ## 60,000km for biodiversity and 20,000Mg carbon
-targets <- c(50000, 450000)
+targets <- c(60000, 450000)
 ```
 
 
@@ -634,5 +634,35 @@ counts_sol_state <- full_join(ssp1_zs_sol_state, ssp2_zs_sol_state, by = "name_s
   full_join(ssp3_zs_sol_state, by = "name_state") %>% 
   full_join(ssp4_zs_sol_state, by = "name_state") %>% 
   full_join(ssp5_zs_sol_state, by = "name_state")
+```
+
+Info on carbon and biodiversity layers
+```{r}
+# carbon --------------------------------------------------------------------
+
+## mean carbon by biome
+carbon_mean <- zonal(carbon_brazil, biomes_rast, "mean", na.rm = TRUE)
+
+## how much carbon can be stored in each biome
+carbon_sum <- zonal(carbon_brazil, biomes_rast, 'sum', na.rm = TRUE)
+
+### relative percentage of stored carbon in each biome
+carbon_amazon <- (carbon_sum[1,2])/(sum(carbon_sum[2]))
+carbon_caatinga <- (carbon_sum[2,2])/(sum(carbon_sum[2]))
+carbon_cerrado <- (carbon_sum[3,2])/(sum(carbon_sum[2]))
+carbon_atl_for <- (carbon_sum[4,2])/(sum(carbon_sum[2]))
+carbon_pampa <- (carbon_sum[5,2])/(sum(carbon_sum[2]))
+
+
+# Biodiversity --------------------------------------------------------------
+## how many pixels in each biome
+bio_sum <- zonal(biodiv_binary, biomes_rast, 'sum', na.rm = TRUE)
+
+## relative percentage of bio habitat in each biome
+bio_amazon <- (bio_sum[1,2])/(sum(bio_sum[2]))
+bio_caatinga <- (bio_sum[2,2])/(sum(bio_sum[2]))
+bio_cerrado <- (bio_sum[3,2])/(sum(bio_sum[2]))
+bio_atl_for <- (bio_sum[4,2])/(sum(bio_sum[2]))
+bio_pampa <- (bio_sum[5,2])/(sum(bio_sum[2]))
 ```
 
