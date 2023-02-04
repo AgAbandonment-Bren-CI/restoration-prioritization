@@ -23,6 +23,7 @@ library(geobr)         # geometries for Brazilian boundaries
 library(ggplot2)       # visualize some outputs
 library(tidyverse)     # always!
 library(janitor)       # cleaning up dfs
+library(kableExtra)    # tables
 ```
 
 ## Overview
@@ -98,6 +99,36 @@ pantanal <- biomes %>%
   filter(code_biome == 6) %>% 
   st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
   vect()
+```
+
+### Protected Areas
+This dataset is sourced from the World Database of Protected Areas (WDPA). [MORE INFO LATER]
+
+Source: html
+
+```{r}
+wdpa_poly1 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_0/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
+wdpa_poly2 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_1/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
+wdpa_poly3 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_2/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
+
+## set crs of polygons equal to rasters
+crs(wdpa_poly1) = crs(ssp1_abandoned_crop)
+crs(wdpa_poly2) = crs(ssp1_abandoned_crop)
+crs(wdpa_poly2) = crs(ssp1_abandoned_crop)
+
+## convert vects to rasts
+wdpa_rast1 <- rasterize(wdpa_poly1, ssp1_abandoned_crop, field = "WDPA_PID")
+```
+
+```{r}
+#how many planning units are in the PAs?
+### doesn't work, returns 0 but there are
+pus1 <- terra::extract(ssp1_abandoned_crop, wdpa_poly1, fun = 'sum', method = 'simple', na.rm = TRUE)
+pus2 <- terra::extract(ssp1_abandoned_crop, wdpa_poly2, fun = 'sum', method = 'simple', na.rm = TRUE)
+pus3 <- terra::extract(ssp1_abandoned_crop, wdpa_poly3, fun = 'sum', method = 'simple', na.rm = TRUE)
+
+plot(wdpa_poly1)
+plot(ssp1_abandoned_crop, col = "black", add = T)
 ```
 
 
@@ -207,6 +238,59 @@ biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.ti
 ```
 
 
+```{r}
+rich <- rast("data/richness_current_allVerts.tif")
+
+#change biome crs because it's faster than changing crs of global raster
+brazil_trans <- biomes_vect %>% 
+  project(y = crs(rich))
+
+# crop carbon data to Brazil
+bio_rich <- rich %>% 
+  crop(brazil_trans) %>% 
+  mask(brazil_trans) %>%  
+  #change crs back to match other rasters
+  terra::project(y = crs(biomes_vect)) 
+
+plot(bio_rich)
+```
+
+
+
+Test code for reclassifying to avoided extinction risk
+```{r}
+# read in values
+extrisk <- read_csv("data/inputs/globalverts_extrisk_scale.csv")
+
+
+# reclassify 
+for (i in 1:nrow(extrisk)) {
+  [  >= extrisk$rasterval[i, "lower"] & tr <= extrisk$rasterval[i, "upper"]] <- extrisk$extrisk[i]
+}
+
+
+# create matrix and df to reclassify biodiversity raster
+reclass_df <- c(0, 0.08799, 0.00079,
+                0.08899, 0.11099, 0.00080,
+                0.11199, 0.11899, 0.00081,
+                0.11999, 0.12599, 0.00082,
+                0.12699, 0.13499, 0.00083,
+                0.13599, 0.14299, 0.00084,
+                0.14399, 0.14899, 0.00085,
+                0.14999, 0.15599, 0.00086,
+                0.15699, 0.16199, 0.00087)
+
+reclass_m <- matrix(reclass_df, ncol = 3, byrow = TRUE)
+
+# reclassify raster to extrisk
+biodiversity_brazil_extrisk <- 
+```
+
+
+
+
+
+
 ### Cost Layer
 The cost of restoration in Brazil differs with location (by biome), restoration method (six types), and environmental condition of land (favorable or unfavorable). These costs were sourced from a 2017 Nature Conservancy report, written by Rubens de Miranda Benini and Sergio Adeodato. 
 
@@ -233,15 +317,18 @@ Wrangle data into formats suitable for prioritizr inputs.
 
 ### Cost
 Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter` lines of code. 
-
-- NOTE: need to multiple cost by 100 and rerun all code to reflect cost per km rather than hectare
+Costs are per hectare, so we need to convert it to km^2. Additionally, the costs numbers are too large to use in prioritizr budget, so we need to convert costs to millions per km^2 for ease. 
 ```{r}
 # Looking at conducting natural regeneration and "unfavorable environmental conditions" (CAD)
 costs_filtered <- costs %>% 
   filter(restoration_method == "conducting_natural_regeneration") %>% 
   filter(environmental_conditions == "CAD") %>% 
   filter(biome_code != 6) %>%   #remove pantanal data
-  select(!c(id, biome))  #remove id and biome columns
+  select(!c(id, biome)) %>%   #remove id and biome columns
+  mutate(cost_mil_r_km = cost_r_ha / 10000,   #convert to cost/km2
+         cost_mil_usd_km = cost_usd_ha / 10000,
+         .before = 1)
+
 ```
 
 To properly assign costs to our planning units, we need to merge our biome data with the filtered cost data. This dataset will then be rasterized for the next step of finalizing our planning units. 
@@ -258,7 +345,7 @@ biomes_cost_vect <- biomes_cost[-7, ] %>%   #remove coastal system biome
 # turn vect into a raster
 biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect file to rasterize
                               y = ssp1_abandoned_crop,   #raster file to provide example crs and spatial extent
-                              field = "cost_r_ha")       #values for raster
+                              field = "cost_mil_r_km")       #values for raster
 
 # remove pantanal biome
 biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue = NA)
@@ -322,12 +409,136 @@ carbon_brazil <- raster(carbon_brazil)
 # now stack the two rasters
 features <- stack(biodiv_binary, carbon_brazil)
 
+
+
+# mask feature data to only planning units
+# for more accurate relative targets
+biodiv_binary_pu <- 
+
 # set up targets
 ## 60,000km for biodiversity and 20,000Mg carbon
-targets <- c(60000, 450000)
+
+
+
+## reset both targets to be minimize shortfall
+## find how much carbon/biod is available in each biome and then set 
+targets <- c(50000, 450000)
+```
+
+#### Target setting
+
+To help determine our targets for the spatial prioritization, let's figure out how much of the biodiversity and carbon features are present in the planning units. We want to determine this both across all of Brazil and by biome. 
+
+First, we'll calculate the total carbon sequestration potential across all planning units within Brazil, by SSP.
+```{r}
+## make list of rasters with planning units by SSP --------------------------
+all_ssp_pu <- c("data/inputs/ssp1/SSP1_abandoned_cropland_brazil.tif",
+                "data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif",
+                "data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif",
+                "data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif",
+                "data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
+
+
+## write function to return total carbon seq potential
+## within the planning units in an SSP --------------------------------------
+pu_carbon_brazil <- function(carbon, ssp) {
+  #mask brazil carbon layer with SSP planning units
+  carbon_brazil_ssp <- terra::mask(carbon, ssp) %>% 
+  #calc the total carbon within planning units
+  terra::global(., fun = 'sum', na.rm = TRUE)
+  return(carbon_brazil_ssp)
+}
+
+
+## create empty df to store results -----------------------------------------
+carbon_sum_brazil <- data.frame() 
+
+## loop through each raster -------------------------------------------------
+for(i in 1:length(all_ssp_pu)) {
+  #load raster
+  r <- rast(all_ssp_pu[i])
+  #process raster and store result
+  result <- pu_carbon_brazil(carbon_brazil, r)
+  carbon_sum_brazil <- rbind(carbon_sum_brazil, data.frame(raster = all_ssp_pu[i],
+                                           value = result,
+                                           stringsAsFactors = FALSE))
+}
+
+## output results in table --------------------------------------------------
+kable(carbon_sum_brazil) %>%
+  kable_styling(full_width = F, font_size = 12) %>%
+  column_spec(1, width = "20%") %>%
+  kable_material_dark("striped") %>% 
+  row_spec(0, font_size = 14, bold = T) 
 ```
 
 
+
+We are these different???
+```{r}
+amazon_test <- mask(carbon_brazil, ssp1_abandoned_crop) %>% 
+ mask(., cerrado, touches = TRUE) %>% 
+  terra::global(., fun = 'sum', na.rm = TRUE)
+
+brazil_test <- terra::global(blah, fun = 'sum', na.rm = T)
+
+blah <- mask(carbon_brazil, ssp1_abandoned_crop)
+
+
+test <- zonal(blah, biomes_rast, "sum", na.rm = TRUE)
+
+
+glarb <- terra::extract(blah, biomes_vect,
+                        fun = 'sum', method = 'simple', na.rm = T)
+glarb
+
+
+# try with biod
+
+bio_test <- mask(biodiv_binary, ssp1_abandoned_crop)
+
+glarb_bio <- terra::zonal(bio_test, biomes_rast, "sum", na.rm = T)
+
+glarb_bio_sum <- sum(glarb_bio$BinaryBiodiversity, na.rm = T)
+# move ahead with the zonal/extract one that 
+plot(bio_test)
+
+plot(blah)
+
+plot(biomes_rast)
+plot(amazon, add = T)
+```
+
+
+Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
+```{r}
+## function will mask Brazil-wide carbon and biodiversity layers
+## by planning units for each SSP, then stack raster 
+carbon_bio_pu_mask <- function(carbon, bio, ssp) {
+  # mask brazil carbon layer with SSP pus
+  carbon_pu_ssp <- terra::mask(carbon, ssp) 
+  # convert to from spatrast to rastlayer
+  carbon_pu_ssp <- raster(carbon_pu_ssp)
+  
+  # mask biodiversity layer by SSP pus
+  bio_pu_ssp <- terra::mask(bio, ssp)
+  # convert to rastLayer
+  bio_pu_ssp <- raster(bio_pu_ssp)
+  
+  # stack the raster layers
+  feature_pu_ssp <- stack(carbon_pu_ssp, bio_pu_ssp)
+  return(feature_pu_ssp)
+}
+
+
+## Now use function to create feature rastStack for each SSP
+## (in future, figure out how to loop this!)
+ssp1_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp1_abandoned_crop)
+ssp2_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp2_abandoned_crop)
+ssp3_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp3_abandoned_crop)
+ssp4_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp4_abandoned_crop)
+ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp5_abandoned_crop)
+```
 
 
 
@@ -335,6 +546,21 @@ targets <- c(60000, 450000)
 
 This is where we will start formulating the problem to be solved in prioritizr!
 ```{r}
+### test minimize shortfall
+p_min_abs <- problem(ssp1_pu, ssp1_feat) %>% 
+  add_min_shortfall_objective(1147.374261) %>% 
+  add_absolute_targets(c(63804, 994741)) %>%  #this is 100% of targets in ssp1
+  add_gurobi_solver(gap = 0.05)
+
+s_min_abs <- solve(p_min_abs)
+
+p_min_rel <- problem(ssp1_pu, ssp1_feat) %>% 
+  add_min_shortfall_objective(1147.4) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+s_min_rel <- solve(p_min_rel)
+
 # SSP1 --------------------------------------------
 p1 <- problem(ssp1_pu, features) %>% 
   # minimize cost while ensuring all targets are met
@@ -342,6 +568,7 @@ p1 <- problem(ssp1_pu, features) %>%
   add_absolute_targets(targets) %>% 
   add_gurobi_solver(gap = 0.05)
 
+s1 <- solve(p1)
 
 # SSP2 --------------------------------------------
 p2 <- problem(ssp2_pu, features) %>% 
@@ -378,13 +605,6 @@ p5 <- problem(ssp5_pu, features) %>%
 ```{r}
 s1 <- solve(p1)
 
-s2 <- solve(p2)
-
-s3 <- solve(p3)
-
-s4 <- solve(p4)
-
-s5 <- solve(p5)
 
 ## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
@@ -556,11 +776,11 @@ total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) +
 
 ## By Biome --------------------------------
 ### make raster with biome codes as values
-biomes_rast <- rasterize(x = biomes_cost_vect,
+biomes_rast <- rasterize(x = biomes_vect,
                          y = ssp1_abandoned_crop,
                          field = "name_biome")       
 ### remove pantanal biome
-biomes_rast <- mask(biomes_rast, pantanal, inverse = TRUE, updatevalue = NA)
+biomes_rast_noPant <- mask(biomes_rast, pantanal, inverse = TRUE, updatevalue = NA)
 
 ### find how many pus were present in each biome
 ssp1_zs_pu_biome <- zonal(pu1, biomes_rast, "sum", na.rm = TRUE)
@@ -636,22 +856,26 @@ counts_sol_state <- full_join(ssp1_zs_sol_state, ssp2_zs_sol_state, by = "name_s
   full_join(ssp5_zs_sol_state, by = "name_state")
 ```
 
+
+
 Info on carbon and biodiversity layers
 ```{r}
 # carbon --------------------------------------------------------------------
 
-## mean carbon by biome
+## mean total carbon by biome
 carbon_mean <- zonal(carbon_brazil, biomes_rast, "mean", na.rm = TRUE)
 
-## how much carbon can be stored in each biome
+## how much carbon can be stored in each biome?
 carbon_sum <- zonal(carbon_brazil, biomes_rast, 'sum', na.rm = TRUE)
 
-### relative percentage of stored carbon in each biome
+## relative percentage of stored carbon in each biome
 carbon_amazon <- (carbon_sum[1,2])/(sum(carbon_sum[2]))
 carbon_caatinga <- (carbon_sum[2,2])/(sum(carbon_sum[2]))
 carbon_cerrado <- (carbon_sum[3,2])/(sum(carbon_sum[2]))
 carbon_atl_for <- (carbon_sum[4,2])/(sum(carbon_sum[2]))
 carbon_pampa <- (carbon_sum[5,2])/(sum(carbon_sum[2]))
+
+## how much carbon within the planning units across Brazil?
 
 
 # Biodiversity --------------------------------------------------------------
@@ -665,4 +889,5 @@ bio_cerrado <- (bio_sum[3,2])/(sum(bio_sum[2]))
 bio_atl_for <- (bio_sum[4,2])/(sum(bio_sum[2]))
 bio_pampa <- (bio_sum[5,2])/(sum(bio_sum[2]))
 ```
+
 
