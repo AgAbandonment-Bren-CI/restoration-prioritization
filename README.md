@@ -19,7 +19,7 @@ Data files used in this analysis are too large to push to GitHub and must be sav
 - Data from Chen et al. (2022) is publically available and can be accessed here: https://zenodo.org/record/4584775#.YuMq8nbMK5c
 
 *Carbon*:
-- Info on carbon data and link to source
+- Carbon sequestration data available at: https://data.globalforestwatch.org/documents/gfw::carbon-accumulation-potential-from-natural-forest-regrowth-in-reforestable-areas/about
 
 *Biodiversity*:
 - Info on biodiv data and link to source
