@@ -258,15 +258,12 @@ plot(bio_rich)
 
 
 Test code for reclassifying to avoided extinction risk
+** NOTE: Try using that Lead functionfrom lab to move values up, then create matrix with 3 rows and reclassify.
 ```{r}
 # read in values
 extrisk <- read_csv("data/inputs/globalverts_extrisk_scale.csv")
 
 
-# reclassify 
-for (i in 1:nrow(extrisk)) {
-  [  >= extrisk$rasterval[i, "lower"] & tr <= extrisk$rasterval[i, "upper"]] <- extrisk$extrisk[i]
-}
 
 
 # create matrix and df to reclassify biodiversity raster
@@ -283,7 +280,7 @@ reclass_df <- c(0, 0.08799, 0.00079,
 reclass_m <- matrix(reclass_df, ncol = 3, byrow = TRUE)
 
 # reclassify raster to extrisk
-biodiversity_brazil_extrisk <- 
+biodiversity_brazil_extrisk <- classify(biodiversity_brazil, extrisk)
 ```
 
 
@@ -398,117 +395,7 @@ biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
   
 ```
  
-
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
-```{r}
-# convert biodiversity and carbon layers from
-# terra "SpatRaster" format to raster "RasterLayer"
-biodiv_binary <- raster(biodiv_binary)
-carbon_brazil <- raster(carbon_brazil)
-
-# now stack the two rasters
-features <- stack(biodiv_binary, carbon_brazil)
-
-
-
-# mask feature data to only planning units
-# for more accurate relative targets
-biodiv_binary_pu <- 
-
-# set up targets
-## 60,000km for biodiversity and 20,000Mg carbon
-
-
-
-## reset both targets to be minimize shortfall
-## find how much carbon/biod is available in each biome and then set 
-targets <- c(50000, 450000)
-```
-
-#### Target setting
-
-To help determine our targets for the spatial prioritization, let's figure out how much of the biodiversity and carbon features are present in the planning units. We want to determine this both across all of Brazil and by biome. 
-
-First, we'll calculate the total carbon sequestration potential across all planning units within Brazil, by SSP.
-```{r}
-## make list of rasters with planning units by SSP --------------------------
-all_ssp_pu <- c("data/inputs/ssp1/SSP1_abandoned_cropland_brazil.tif",
-                "data/inputs/ssp2/SSP2_abandoned_cropland_brazil.tif",
-                "data/inputs/ssp3/SSP3_abandoned_cropland_brazil.tif",
-                "data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif",
-                "data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
-
-
-## write function to return total carbon seq potential
-## within the planning units in an SSP --------------------------------------
-pu_carbon_brazil <- function(carbon, ssp) {
-  #mask brazil carbon layer with SSP planning units
-  carbon_brazil_ssp <- terra::mask(carbon, ssp) %>% 
-  #calc the total carbon within planning units
-  terra::global(., fun = 'sum', na.rm = TRUE)
-  return(carbon_brazil_ssp)
-}
-
-
-## create empty df to store results -----------------------------------------
-carbon_sum_brazil <- data.frame() 
-
-## loop through each raster -------------------------------------------------
-for(i in 1:length(all_ssp_pu)) {
-  #load raster
-  r <- rast(all_ssp_pu[i])
-  #process raster and store result
-  result <- pu_carbon_brazil(carbon_brazil, r)
-  carbon_sum_brazil <- rbind(carbon_sum_brazil, data.frame(raster = all_ssp_pu[i],
-                                           value = result,
-                                           stringsAsFactors = FALSE))
-}
-
-## output results in table --------------------------------------------------
-kable(carbon_sum_brazil) %>%
-  kable_styling(full_width = F, font_size = 12) %>%
-  column_spec(1, width = "20%") %>%
-  kable_material_dark("striped") %>% 
-  row_spec(0, font_size = 14, bold = T) 
-```
-
-
-
-We are these different???
-```{r}
-amazon_test <- mask(carbon_brazil, ssp1_abandoned_crop) %>% 
- mask(., cerrado, touches = TRUE) %>% 
-  terra::global(., fun = 'sum', na.rm = TRUE)
-
-brazil_test <- terra::global(blah, fun = 'sum', na.rm = T)
-
-blah <- mask(carbon_brazil, ssp1_abandoned_crop)
-
-
-test <- zonal(blah, biomes_rast, "sum", na.rm = TRUE)
-
-
-glarb <- terra::extract(blah, biomes_vect,
-                        fun = 'sum', method = 'simple', na.rm = T)
-glarb
-
-
-# try with biod
-
-bio_test <- mask(biodiv_binary, ssp1_abandoned_crop)
-
-glarb_bio <- terra::zonal(bio_test, biomes_rast, "sum", na.rm = T)
-
-glarb_bio_sum <- sum(glarb_bio$BinaryBiodiversity, na.rm = T)
-# move ahead with the zonal/extract one that 
-plot(bio_test)
-
-plot(blah)
-
-plot(biomes_rast)
-plot(amazon, add = T)
-```
-
 
 Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
 ```{r}
@@ -542,59 +429,45 @@ ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp5_abandoned_cro
 
 
 
+
 ## Problem Formulations
 
 This is where we will start formulating the problem to be solved in prioritizr!
+
+First, we will create a problem for each SSP that aims to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget. In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. For this run, the budget is 1147.37 million Brazilian Reals. This amount is the the entire budget for environmental preservation and conservation within the Brazilian Ministry of the Environment.
 ```{r}
-### test minimize shortfall
-p_min_abs <- problem(ssp1_pu, ssp1_feat) %>% 
-  add_min_shortfall_objective(1147.374261) %>% 
-  add_absolute_targets(c(63804, 994741)) %>%  #this is 100% of targets in ssp1
-  add_gurobi_solver(gap = 0.05)
-
-s_min_abs <- solve(p_min_abs)
-
-p_min_rel <- problem(ssp1_pu, ssp1_feat) %>% 
-  add_min_shortfall_objective(1147.4) %>% 
+# SSP1 --------------------------------------------
+p1 <- problem(ssp1_pu, ssp1_feat) %>% 
+  add_min_shortfall_objective(budget = 1147.37) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-s_min_rel <- solve(p_min_rel)
-
-# SSP1 --------------------------------------------
-p1 <- problem(ssp1_pu, features) %>% 
-  # minimize cost while ensuring all targets are met
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_gurobi_solver(gap = 0.05)
-
-s1 <- solve(p1)
 
 # SSP2 --------------------------------------------
-p2 <- problem(ssp2_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_gurobi_solver(gap = 0.05) 
+p2 <- problem(ssp2_pu, ssp2_feat) %>% 
+  add_min_shortfall_objective(budget = 1147.37) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
+  add_gurobi_solver(gap = 0.05)
 
 
 # SSP3 --------------------------------------------
-p3 <- problem(ssp3_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
+p3 <- problem(ssp3_pu, ssp3_feat) %>% 
+  add_min_shortfall_objective(budget = 1147.37) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
 
 # SSP4 --------------------------------------------
-p4 <- problem(ssp4_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
+p4 <- problem(ssp4_pu, ssp4_feat) %>% 
+  add_min_shortfall_objective(budget = 1147.37) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
 
 # SSP5 --------------------------------------------
-p5 <- problem(ssp5_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
+p5 <- problem(ssp5_pu, ssp5_feat) %>% 
+  add_min_shortfall_objective(budget = 1147.37) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05) 
 
 ```
@@ -603,7 +476,12 @@ p5 <- problem(ssp5_pu, features) %>%
 
 ## Problem Solving
 ```{r}
+## first solve the prioritizr problems
 s1 <- solve(p1)
+s2 <- solve(p2)
+s3 <- solve(p3)
+s4 <- solve(p4)
+s5 <- solve(p5)
 
 
 ## convert RasterLayers back to SpatRast and export
