@@ -105,6 +105,7 @@ pantanal <- biomes %>%
 This dataset is sourced from the World Database of Protected Areas (WDPA). [MORE INFO LATER]
 
 Source: html
+-   NOTE: layer from Cam and Shayan are similar, but slightly different. Moving forward in analysis with Cam's for now, but can change the source later.
 
 ```{r}
 wdpa_poly1 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_0/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
@@ -118,6 +119,49 @@ crs(wdpa_poly2) = crs(ssp1_abandoned_crop)
 
 ## convert vects to rasts
 wdpa_rast1 <- rasterize(wdpa_poly1, ssp1_abandoned_crop, field = "WDPA_PID")
+
+
+## ------------------------------------------------
+## read in combined raster
+wdpa_shy <- rast("data/inputs/combined_WDPAs_Brazil_Dec.tif")
+wdpa_5km <- rast("data/inputs/wdpa_5km_raster.tif")
+
+
+#change biome crs because it's faster than changing crs of global raster
+brazil_trans <- biomes_vect %>% 
+  project(y = crs(wdpa_shy))
+
+# crop PAs to terrestrial Brazil
+wdpa_brazil <- wdpa_shy %>% 
+  crop(brazil_trans) %>% 
+  mask(brazil_trans) %>%  
+  #change crs back to match other rasters
+  terra::project(y = crs(biomes_vect)) 
+
+
+
+# default resolution of carbon layer is 898.8m
+# change resolution to match other rasters (1km)
+wdpa_brazil <- resample(wdpa_brazil, ssp1_abandoned_crop, method = "bilinear")
+
+
+wdpa_brazil[wdpa_brazil != 0] <- 1
+wdpa_5km_brazil[wdpa_5km_brazil != 0] <- 1
+
+test <- wdpa_5km_brazil - wdpa_brazil
+
+
+
+# remove Panatnal biome from carbon layer
+carbon_brazil <- mask(carbon_brazil, pantanal, inverse = TRUE, updatevalue = NA, touches = TRUE)
+
+# change the name saved within raster for easier recall
+# after stacking feature rasters
+names(carbon_brazil) <- "carbon_brazil"
+
+# test plot to visualize results
+plot(carbon_brazil)
+plot(biomes_vect, add = TRUE)
 ```
 
 ```{r}
@@ -182,13 +226,13 @@ carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
 
 
 ### Biodiversity
-Read in biodiversity data. Info about the data and where it is from. 
+Read in biodiversity data. [Info about the data and where it is from. ]
 
-After reading in the global layer, we will crop it to Brazil, resample to match the resolution of the planning units, and save the output raster. 
+After reading in the global layer, we will crop it to Brazil and resample to match the resolution of the planning units. Then, we will reclassify the layer to extinction risk values; this will help set tangible goals of minimizing extinction risk. The final raster will be saved locally, allowing the user to simply read in the layer in the future and only run this code-chunk once. 
 
 ```{r, eval=FALSE}
-#NOTE: this code chunk defaults to not evaluate.
-#only needs to be run once and then cropped raster is saved
+###NOTE: this code chunk defaults to not evaluate.
+###only needs to be run once and then cropped raster is saved
 
 #read in global biodiversity data
 biodiversity_global <- rast("data/inputs/sparc_conservationPriorities.tif")
@@ -215,7 +259,7 @@ biodiversity_brazil <- disagg(biodiversity_brazil,
                               method = "bilinear")  
 # resample higher res biodiversity to ensure same res and geometries 
 # (fine-tuning the res)
-biodiversity_brazil <- resample(biodiversity_brazil, ssp1_abandoned_crop, method = "bilinear")
+biodiversity_brazil <- resample(biodiversity_brazil,ssp1_abandoned_crop, method = "bilinear")
 
 # remove Pantanal biome from biodiversity layer
 biodiversity_brazil <- mask(biodiversity_brazil, pantanal, inverse = TRUE, updatevalue = NA)
@@ -230,13 +274,41 @@ plot(biomes_vect, add = TRUE)
 
 #export biodiversity_brazil as intermediate raster
 writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif", overwrite = TRUE)
+
+
+
+
+### Now reclassify cropped layer to extinction risk -----------------------------------------
+## read in values
+extrisk <- read_csv("data/inputs/globalverts_extrisk_scale.csv")
+
+## make three columns for a "from to" reclass
+extrisk3 <- extrisk %>%
+  # bring rasterval from previous row down as lower bound
+  mutate(from = lag(rasterval), .before = 1) %>% 
+  # rename rasterval to indicate upper bound
+  rename(to = rasterval) %>% 
+  # remove resulting na
+  drop_na 
+
+# turn csv into matrix
+extrisk_m <- data.matrix(extrisk3, rownames.force = NA)
+
+# reclassify raster to extrisk
+bio_ext_brazil <- classify(biodiversity_brazil, extrisk_m, right = TRUE)
+
+## save new raster
+writeRaster(bio_ext_brazil, "data/outputs/biodiversity_extrisk_brazil.tif")
 ```
 
+Run below line of code just to read in layer if already created:
 ```{r}
-# run below line of code just to read in layer if already created
-biodiversity_brazil <- rast("data/outputs/sparc_conservationPriorities_Brazil.tif")
+bio_ext_brazil <- rast("data/outputs/biodiversity_extrisk_brazil.tif")
 ```
 
+
+#### Current species richness
+Do something with current richness layer to compare to prioritizr results. 
 
 ```{r}
 rich <- rast("data/richness_current_allVerts.tif")
@@ -254,36 +326,6 @@ bio_rich <- rich %>%
 
 plot(bio_rich)
 ```
-
-
-
-Test code for reclassifying to avoided extinction risk
-** NOTE: Try using that Lead functionfrom lab to move values up, then create matrix with 3 rows and reclassify.
-```{r}
-# read in values
-extrisk <- read_csv("data/inputs/globalverts_extrisk_scale.csv")
-
-
-
-
-# create matrix and df to reclassify biodiversity raster
-reclass_df <- c(0, 0.08799, 0.00079,
-                0.08899, 0.11099, 0.00080,
-                0.11199, 0.11899, 0.00081,
-                0.11999, 0.12599, 0.00082,
-                0.12699, 0.13499, 0.00083,
-                0.13599, 0.14299, 0.00084,
-                0.14399, 0.14899, 0.00085,
-                0.14999, 0.15599, 0.00086,
-                0.15699, 0.16199, 0.00087)
-
-reclass_m <- matrix(reclass_df, ncol = 3, byrow = TRUE)
-
-# reclassify raster to extrisk
-biodiversity_brazil_extrisk <- classify(biodiversity_brazil, extrisk)
-```
-
-
 
 
 
@@ -373,28 +415,15 @@ ssp5_pu <- raster(ssp5_pu)
 ```
 
 
+-   NOTE: Testing adding PAs to ssp1 planning units and adjusting the features as necessary for the goals
+```{r}
+
+```
+
 
 
 ### Features
 
-We want to break up biodiversity layer into quantiles, then keep only the top by making it binary. 
-Then we can set targets for meeting a percentage of the "available" biodiversity area
-```{r}
-##biodiversity_brazil_quant <- global(biodiversity_brazil, probs=seq(0, 1, 0.25), na.rm = TRUE)
-
-#biodiv_binary <- rast("data/inputs/BinaryBiodiversity.tif")
-
-#biodiv_binary <- mask(biodiv_binary, biomes_vect)
-#biodiv_binary <- mask(biodiv_binary, pantanal, inverse = TRUE, updatevalue = NA)
-
-#writeRaster(biodiv_binary, "data/outputs/biodiversity_binary_brazil.tif")
-
-biodiv_binary <- rast("data/outputs/biodiversity_binary_brazil.tif")
-
-#plot(biodiv_binary)
-  
-```
- 
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
 
 Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
@@ -420,11 +449,11 @@ carbon_bio_pu_mask <- function(carbon, bio, ssp) {
 
 ## Now use function to create feature rastStack for each SSP
 ## (in future, figure out how to loop this!)
-ssp1_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp1_abandoned_crop)
-ssp2_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp2_abandoned_crop)
-ssp3_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp3_abandoned_crop)
-ssp4_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp4_abandoned_crop)
-ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, biodiv_binary, ssp5_abandoned_crop)
+ssp1_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop)
+ssp2_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop)
+ssp3_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
+ssp4_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
+ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
 ```
 
 
@@ -478,6 +507,8 @@ p5 <- problem(ssp5_pu, ssp5_feat) %>%
 ```{r}
 ## first solve the prioritizr problems
 s1 <- solve(p1)
+eval_target_coverage_summary(p1, s1)
+
 s2 <- solve(p2)
 s3 <- solve(p3)
 s4 <- solve(p4)
