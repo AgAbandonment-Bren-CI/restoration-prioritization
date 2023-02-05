@@ -50,6 +50,24 @@ ssp4_abandoned_crop <- rast("data/inputs/ssp4/SSP4_abandoned_cropland_brazil.tif
 ssp5_abandoned_crop <- rast("data/inputs/ssp5/SSP5_abandoned_cropland_brazil.tif")
 ```
 
+We also want to figure out which parcels of abandoned cropland are present in every SSP scenario. To solve this, we'll first reclassify the abandoned crop layers to just be a value of 1 (rather than range of 1-7). Then, we'll add these into the combined raster. 
+```{r}
+reclass_df <- c(1, 7, 1)
+reclass_m <- matrix(reclass_df, ncol = 3, byrow = T)
+
+ssp1_reclass <- classify(ssp1_abandoned_crop, reclass_m)
+ssp2_reclass <- classify(ssp2_abandoned_crop, reclass_m)
+ssp3_reclass <- classify(ssp3_abandoned_crop, reclass_m)
+ssp4_reclass <- classify(ssp4_abandoned_crop, reclass_m)
+ssp5_reclass <- classify(ssp5_abandoned_crop, reclass_m)
+
+# add together and only keep planning units that overlap in all SSPs
+ssp_all_abandoned_crop <- ssp1_reclass + ssp2_reclass + ssp3_reclass + ssp4_reclass + ssp5_reclass
+```
+
+
+
+
 
 ### Brazilian Biomes
 The boundary information for Brazilian biomes is read-in using the geobr package. Biome polygons are sourced from the Brazilian Institute of Geography and Statistics (IBGE). This dataset uses 2019 IBGE data at scale 1:250.000.
@@ -123,45 +141,46 @@ wdpa_rast1 <- rasterize(wdpa_poly1, ssp1_abandoned_crop, field = "WDPA_PID")
 
 ## ------------------------------------------------
 ## read in combined raster
-wdpa_shy <- rast("data/inputs/combined_WDPAs_Brazil_Dec.tif")
-wdpa_5km <- rast("data/inputs/wdpa_5km_raster.tif")
+wdpa <- rast("data/inputs/wdpa_5km_raster.tif")
 
 
 #change biome crs because it's faster than changing crs of global raster
 brazil_trans <- biomes_vect %>% 
-  project(y = crs(wdpa_shy))
+  project(y = crs(wdpa))
 
 # crop PAs to terrestrial Brazil
-wdpa_brazil <- wdpa_shy %>% 
+wdpa_crop <- wdpa %>% 
   crop(brazil_trans) %>% 
   mask(brazil_trans) %>%  
   #change crs back to match other rasters
   terra::project(y = crs(biomes_vect)) 
 
 
+# change resolution from 5kmm to roughly 1km
+# to figure out factor that gets res closest to target raster (Chen), use this:
+factor <- ceiling(res(wdpa_crop)[1]/res(ssp1_abandoned_crop)[1])
+factor
 
-# default resolution of carbon layer is 898.8m
-# change resolution to match other rasters (1km)
-wdpa_brazil <- resample(wdpa_brazil, ssp1_abandoned_crop, method = "bilinear")
-
-
-wdpa_brazil[wdpa_brazil != 0] <- 1
-wdpa_5km_brazil[wdpa_5km_brazil != 0] <- 1
-
-test <- wdpa_5km_brazil - wdpa_brazil
-
+# now change resolution using terra:disagg()
+wdpa_disagg <- disagg(wdpa_crop,        #raster 
+                            fact = 5,         #disagg factor
+                            method = "near")  #categorical values (either PA or not)
 
 
-# remove Panatnal biome from carbon layer
-carbon_brazil <- mask(carbon_brazil, pantanal, inverse = TRUE, updatevalue = NA, touches = TRUE)
+# use resample to make resolutions EXACTLY the same
+wdpa_resamp <- resample(wdpa_disagg, ssp1_abandoned_crop, method = "near")
 
-# change the name saved within raster for easier recall
-# after stacking feature rasters
-names(carbon_brazil) <- "carbon_brazil"
 
-# test plot to visualize results
-plot(carbon_brazil)
-plot(biomes_vect, add = TRUE)
+# remove Panatnal biome from WDPA layer
+wdpa_noPant <- mask(wdpa_resamp, pantanal, inverse = TRUE, updatevalue = NA, touches = TRUE)
+
+# finally, change values so that outside PA is N/A and value of PA is 0
+# this is so that the "cost" of these areas are free
+
+## this isn't working!!~!!
+
+wdpa_noPant[wdpa_noPant == 0] <- NA
+wdpa_brazil[wdpa_brazil == 100] <- 0
 ```
 
 ```{r}
@@ -227,6 +246,8 @@ carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
 
 ### Biodiversity
 Read in biodiversity data. [Info about the data and where it is from. ]
+
+#### Current/Future biodiversity for prioritization use
 
 After reading in the global layer, we will crop it to Brazil and resample to match the resolution of the planning units. Then, we will reclassify the layer to extinction risk values; this will help set tangible goals of minimizing extinction risk. The final raster will be saved locally, allowing the user to simply read in the layer in the future and only run this code-chunk once. 
 
@@ -308,23 +329,27 @@ bio_ext_brazil <- rast("data/outputs/biodiversity_extrisk_brazil.tif")
 
 
 #### Current species richness
-Do something with current richness layer to compare to prioritizr results. 
+
+We will use the current species richness to compare against our prioritization results. By checking if the areas selected are in the same location as high current species richness, it will help defend the use of the SPARC data. 
 
 ```{r}
-rich <- rast("data/richness_current_allVerts.tif")
+aoh_rich <- rast("data/inputs/aoh_verts_richness.tif")
 
 #change biome crs because it's faster than changing crs of global raster
 brazil_trans <- biomes_vect %>% 
-  project(y = crs(rich))
+  project(y = crs(aoh_rich))
 
 # crop carbon data to Brazil
-bio_rich <- rich %>% 
+bio_rich <- aoh_rich %>% 
   crop(brazil_trans) %>% 
   mask(brazil_trans) %>%  
   #change crs back to match other rasters
   terra::project(y = crs(biomes_vect)) 
 
 plot(bio_rich)
+
+# save raster cropped to Brazil
+writeRaster(bio_rich, "data/outputs/aoh_verts_richness_brazil.tif")
 ```
 
 
@@ -338,11 +363,6 @@ The cost of restoration in Brazil differs with location (by biome), restoration 
 costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>% 
   clean_names()
 ```
-
-
-
-
-
 
 
 
@@ -399,7 +419,7 @@ Decide on the restoration method and land status desired to analyze the cost, th
 # this will isolate pixels of interest (planning units) with associated cost value
 
 ssp1_pu <- mask(biomes_cost_rast, ssp1_abandoned_crop)
-ssp1_pu <- raster(ssp1_pu)  # turn into prioritizr-friendly format
+ssp1_pu <- raster(ssp1_pu)# turn into prioritizr-friendly format
 
 ssp2_pu <- mask(biomes_cost_rast, ssp2_abandoned_crop)
 ssp2_pu <- raster(ssp2_pu)
@@ -412,12 +432,9 @@ ssp4_pu <- raster(ssp4_pu)
 
 ssp5_pu <- mask(biomes_cost_rast, ssp5_abandoned_crop)
 ssp5_pu <- raster(ssp5_pu)
-```
 
-
--   NOTE: Testing adding PAs to ssp1 planning units and adjusting the features as necessary for the goals
-```{r}
-
+ssp_all_pu <- mask(biomes_cost_rast, ssp_all_abandoned_crop)
+ssp_all_pu <- raster(ssp_all_pu)
 ```
 
 
@@ -454,6 +471,7 @@ ssp2_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp2_abandoned_cr
 ssp3_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
 ssp4_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
 ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
+ssp_all_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
 ```
 
 
@@ -461,59 +479,181 @@ ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp5_abandoned_cr
 
 ## Problem Formulations
 
-This is where we will start formulating the problem to be solved in prioritizr!
+This is where we will start formulating the problem to be solved in prioritizr! All base problems will aim to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget. In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. Different problems will be created to observe how solutions change based on budget (low and high) as well as Brazil-wide vs zonal problems. 
 
-First, we will create a problem for each SSP that aims to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget. In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. For this run, the budget is 1147.37 million Brazilian Reals. This amount is the the entire budget for environmental preservation and conservation within the Brazilian Ministry of the Environment.
+Below, we'll establish base problems for all scenarios.
 ```{r}
-# SSP1 --------------------------------------------
 p1 <- problem(ssp1_pu, ssp1_feat) %>% 
-  add_min_shortfall_objective(budget = 1147.37) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-
-# SSP2 --------------------------------------------
-p2 <- problem(ssp2_pu, ssp2_feat) %>% 
-  add_min_shortfall_objective(budget = 1147.37) %>% 
+p2 <- problem(ssp3_pu, ssp3_feat) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-
-# SSP3 --------------------------------------------
 p3 <- problem(ssp3_pu, ssp3_feat) %>% 
-  add_min_shortfall_objective(budget = 1147.37) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-
-# SSP4 --------------------------------------------
 p4 <- problem(ssp4_pu, ssp4_feat) %>% 
-  add_min_shortfall_objective(budget = 1147.37) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-
-# SSP5 --------------------------------------------
 p5 <- problem(ssp5_pu, ssp5_feat) %>% 
-  add_min_shortfall_objective(budget = 1147.37) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
-  add_gurobi_solver(gap = 0.05) 
+  add_gurobi_solver(gap = 0.05)
 
+p_all <- problem(ssp_all_pu, ssp_all_feat) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
+  add_gurobi_solver(gap = 0.05)
+```
+
+
+
+### Brazil-wide solutions
+
+For these problems, the low-end budget is 445.892 million Brazilian Reals. To calculate this amount, we looked at the Environmental management budget of Brazil's Ministry of the Environment. In 2022, Brazil only used 85.8% of the allotted budget. We're curious how much land could be restored with the budget "leftovers". This percentage was used to predict how much money may go unused within the Environmental management budget for 2023: roughly BRL445,862,335. 
+
+To determine the potential high-end of a budget, we looked toward the Amazon Fund. This fund receives money from organizations and countries around the world and can be used at the discretion of the Brazilian government to conserve and restore land throughout the country. NGOs can utilize this fund for projects within the Amazon biome, but the Federal government can use these funds for projects throughout the country. We'll evaluate how much abandoned cropland could be restored if Brazil utilized the entire budget currently available in the Amazon fund: BRL3,400,000,000.
+```{r}
+### SSP1 -----------------------------------------------------
+
+## create problems --------------
+# country-wide at low budget
+p1_lowBud_c <- p1 %>% 
+  add_min_shortfall_objective(budget = 445.862) 
+
+# country-wide at high budget
+p1_highBud_c <- p1 %>% 
+  add_min_shortfall_objective(budget = 3400) 
+
+## solve --------------------------
+s1_c <- stack(solve(p1_lowBud_c), solve(p1_highBud_c))
+# rename rasters in stack
+names(s1_c)[1] = "ssp1_lowBud_c"
+names(s1_c)[2] = "ssp1_highBud_c"
+
+
+### SSP2 -----------------------------------------------------
+
+## create problems ----------------
+# country-wide at low budget
+p2_lowBud_c <- p2 %>% 
+  add_min_shortfall_objective(budget = 445.862)
+
+# country-wide at high budget
+p2_highBud_c <- p2 %>% 
+  add_min_shortfall_objective(budget = 3400) 
+
+## solve --------------------------
+s2_c <- stack(solve(p2_lowBud_c), solve(p2_highBud_c))
+# rename rasters in stack
+names(s2_c)[1] = "ssp2_lowBud_c"
+names(s2_c)[2] = "ssp2_highBud_c"
+
+
+### SSP3 -----------------------------------------------------
+
+## create problems ----------------
+# country-wide at low budget
+p3_lowBud_c <- p3 %>% 
+  add_min_shortfall_objective(budget = 445.862)
+
+# country-wide at high budget
+p3_highBud_c <- p3 %>% 
+  add_min_shortfall_objective(budget = 3400) 
+
+## solve --------------------------
+s3_c <- stack(solve(p3_lowBud_c), solve(p3_highBud_c))
+# rename rasters in stack
+names(s3_c)[1] = "ssp3_lowBud_c"
+names(s3_c)[2] = "ssp3_highBud_c"
+
+
+### SSP4 -----------------------------------------------------
+
+## create problems ----------------
+# country-wide at low budget
+p4_lowBud_c <- p4 %>% 
+  add_min_shortfall_objective(budget = 445.862)
+
+# country-wide at high budget
+p4_highBud_c <- p4 %>% 
+  add_min_shortfall_objective(budget = 3400)
+
+## solve --------------------------
+s4_c <- stack(solve(p4_lowBud_c), solve(p4_highBud_c))
+# rename rasters in stack
+names(s4_c)[1] = "ssp4_lowBud_c"
+names(s4_c)[2] = "ssp4_highBud_c"
+
+
+### SSP5 -----------------------------------------------------
+
+## create problems ----------------
+# country-wide at low budget
+p5_lowBud_c <- p5 %>% 
+  add_min_shortfall_objective(budget = 445.862)
+
+# country-wide at high budget
+p5_highBud_c <- p5 %>% 
+  add_min_shortfall_objective(budget = 3400)
+
+## solve --------------------------
+s5_c <- stack(solve(p5_lowBud_c), solve(p5_highBud_c))
+# rename rasters in stack
+names(s5_c)[1] = "ssp5_lowBud_c"
+names(s5_c)[2] = "ssp5_highBud_c"
+
+
+### All SSPs--------------------------------------------------
+
+## create problems ----------------
+# country-wide at low budget
+p_all_lowBud_c <- p_all %>% 
+  add_min_shortfall_objective(budget = 445.862)
+
+# country-wide at high budget
+p_all_highBud_c <- p_all %>% 
+  add_min_shortfall_objective(budget = 3400) 
+
+## solve --------------------------
+s_all_c <- stack(solve(p_all_lowBud_c), solve(p_all_highBud_c))
+# rename rasters in stack
+names(s_all_c)[1] = "ssp_all_lowBud_c"
+names(s_all_c)[2] = "ssp_all_highBud_c"
 ```
  
+
+
+### Federal unit solutions
+
+Now we will find solutions by breaking the country down by the five Federal Units: North, Northeast, Central-West, Southeast, and South. These units are subnational entities are comprised of several states and hold a degree of self-government and regulation. 
+
 
 
 ## Problem Solving
 ```{r}
 ## first solve the prioritizr problems
-s1 <- solve(p1)
-eval_target_coverage_summary(p1, s1)
+
+## SSP1 -----------------------------------------------------
+
+# country-wide low budget
+s1_lowB_c <- solve(p1_lowB_c)
+
+# country-wide high budget
+s1_highB_c <- solve(p1_highB_c)
+
+eval_target_coverage_summary(p1_lowB_c, s1_lowB_c)
+eval_target_coverage_summary(p1_highB_c, s1_highB_c)
+
+## SSP2 -----------------------------------------------------
 
 s2 <- solve(p2)
 s3 <- solve(p3)
 s4 <- solve(p4)
 s5 <- solve(p5)
-
+s_combo <- solve(p_combo)
 
 ## convert RasterLayers back to SpatRast and export
 ssp1_solution <- rast(s1)
@@ -541,9 +681,13 @@ crs(ssp5_solution) = crs(ssp1_abandoned_crop)
 names(ssp5_solution) <- "ssp5_solution"
 writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
 
-total_solution <- ssp1_solution + ssp2_solution + ssp3_solution + ssp4_solution + ssp5_solution
-writeRaster(total_solution, "data/outputs/total_solution.tif", overwrite = TRUE)
+ssp_all_solution <- rast(s_combo)
+crs(ssp_all_solution) = crs(ssp1_abandoned_crop)
+names(ssp_all_solution) <- "ssp_all_solution"
+writeRaster(ssp_all_solution, "data/outputs/ssp_all_solution.tif", overwrite = TRUE)
 ```
+
+NOTE: For total solution, make another solution/problem that uses combined SSP as pus so that there are more connections
 
 
 Experimenting with boundary length modifiers:
