@@ -487,7 +487,7 @@ p1 <- problem(ssp1_pu, ssp1_feat) %>%
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
-p2 <- problem(ssp3_pu, ssp3_feat) %>% 
+p2 <- problem(ssp2_pu, ssp2_feat) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
   add_gurobi_solver(gap = 0.05)
 
@@ -533,6 +533,11 @@ s1_c <- stack(solve(p1_lowBud_c), solve(p1_highBud_c))
 names(s1_c)[1] = "ssp1_lowBud_c"
 names(s1_c)[2] = "ssp1_highBud_c"
 
+## get solution stats --------------
+# returns the number of pus chosen in solution for low budget
+#eval_target_coverage_summary(p1_lowBud_c, s1_c$ssp1_lowBud_c)
+# returns amount of features held in solution for low budget
+#eval_target_coverage_summary(p1_lowBud_c, s1_c$ssp1_lowBud_c)
 
 ### SSP2 -----------------------------------------------------
 
@@ -632,59 +637,33 @@ Now we will find solutions by breaking the country down by the five Federal Unit
 
 
 
-## Problem Solving
+## Saving solution rasters
 ```{r}
-## first solve the prioritizr problems
+## convert RasterLayers solutions back to SpatRast and export
+## these are raster stacks: first layer is low budget and second for high
+ssp1_sol_c <- rast(s1_c)
+crs(ssp1_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp1_sol_c, "data/outputs/ssp1_solution_country.tif", overwrite = TRUE)
 
-## SSP1 -----------------------------------------------------
+ssp2_sol_c <- rast(s2_c)
+crs(ssp2_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp2_sol_c, "data/outputs/ssp2_solution_country.tif", overwrite = TRUE)
 
-# country-wide low budget
-s1_lowB_c <- solve(p1_lowB_c)
+ssp3_sol_c <- rast(s3_c)
+crs(ssp3_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp3_sol_c, "data/outputs/ssp3_solution_country.tif", overwrite = TRUE)
 
-# country-wide high budget
-s1_highB_c <- solve(p1_highB_c)
+ssp4_sol_c <- rast(s4_c)
+crs(ssp4_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp4_sol_c, "data/outputs/ssp4_solution_country.tif", overwrite = TRUE)
 
-eval_target_coverage_summary(p1_lowB_c, s1_lowB_c)
-eval_target_coverage_summary(p1_highB_c, s1_highB_c)
+ssp5_sol_c <- rast(s5_c)
+crs(ssp5_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp5_sol_c, "data/outputs/ssp5_solution_country.tif", overwrite = TRUE)
 
-## SSP2 -----------------------------------------------------
-
-s2 <- solve(p2)
-s3 <- solve(p3)
-s4 <- solve(p4)
-s5 <- solve(p5)
-s_combo <- solve(p_combo)
-
-## convert RasterLayers back to SpatRast and export
-ssp1_solution <- rast(s1)
-crs(ssp1_solution) = crs(ssp1_abandoned_crop)
-names(ssp1_solution) <- "ssp1_solution"
-writeRaster(ssp1_solution, "data/outputs/ssp1_solution.tif", overwrite = TRUE)
-
-ssp2_solution <- rast(s2)
-crs(ssp2_solution) = crs(ssp1_abandoned_crop)
-names(ssp2_solution) <- "ssp2_solution"
-writeRaster(ssp2_solution, "data/outputs/ssp2_solution.tif", overwrite = TRUE)
-
-ssp3_solution <- rast(s3)
-crs(ssp3_solution) = crs(ssp1_abandoned_crop)
-names(ssp3_solution) <- "ssp3_solution"
-writeRaster(ssp3_solution, "data/outputs/ssp3_solution.tif", overwrite = TRUE)
-
-ssp4_solution <- rast(s4)
-crs(ssp4_solution) = crs(ssp1_abandoned_crop)
-names(ssp4_solution) <- "ssp4_solution"
-writeRaster(ssp4_solution, "data/outputs/ssp4_solution.tif", overwrite = TRUE)
-
-ssp5_solution <- rast(s5)
-crs(ssp5_solution) = crs(ssp1_abandoned_crop)
-names(ssp5_solution) <- "ssp5_solution"
-writeRaster(ssp5_solution, "data/outputs/ssp5_solution.tif", overwrite = TRUE)
-
-ssp_all_solution <- rast(s_combo)
-crs(ssp_all_solution) = crs(ssp1_abandoned_crop)
-names(ssp_all_solution) <- "ssp_all_solution"
-writeRaster(ssp_all_solution, "data/outputs/ssp_all_solution.tif", overwrite = TRUE)
+ssp_all_sol_c <- rast(s_all_c)
+crs(ssp_all_sol_c) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_c, "data/outputs/ssp_all_solution_country.tif", overwrite = TRUE)
 ```
 
 NOTE: For total solution, make another solution/problem that uses combined SSP as pus so that there are more connections
