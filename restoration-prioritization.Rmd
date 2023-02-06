@@ -87,7 +87,7 @@ biomes_vect <- biomes[-7, ] %>%  #remove coastal system biome
   vect()  #turn sf into vector; easier to crop rasts with
 
 
-# create vectors for each of the biomes -----------------------------------------
+# create vectors for each of the biomes ---------------------------------------
 amazon <- biomes %>% 
   filter(code_biome == 1) %>% 
   st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
@@ -118,6 +118,61 @@ pantanal <- biomes %>%
   st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
   vect()
 ```
+
+
+
+
+### Brazilian Regions
+Here we read in boundary data for Brazil's five regions: North, Northeast, Central-West, Southeast, and South. In addition to performing a country-wide spatial prioritization, we will also find solutions based on different regional management zones. Although our restoration cost data is broken down by biome, budget allocations are divided by States and Municipalities; therefore, a budget constrained prioritization must be conducted along political rather than ecological boundaries. 
+```{r}
+# read in region boundaries from geobr package
+regions <- read_region(
+  year = 2020,         #the most recent data available
+  simplified = FALSE   #full resolution for boundaries
+)
+
+# turn into vector
+regions_vect <- regions %>%  #remove coastal system biome
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()  
+
+# create vectors for each of the regions ------------------------------------
+north <- regions %>% 
+  filter(code_region == 1) %>% 
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()
+
+n_east <- regions %>% 
+  filter(code_region == 2) %>% 
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()
+
+s_east <- regions %>% 
+  filter(code_region == 3) %>% 
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()
+
+south <- regions %>% 
+  filter(code_region == 4) %>% 
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()
+
+cent_west <- regions %>% 
+  filter(code_region == 5) %>% 
+  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
+  vect()
+```
+
+
+
+
+
+
+
+
+
+
+
 
 ### Protected Areas
 This dataset is sourced from the World Database of Protected Areas (WDPA). [MORE INFO LATER]
@@ -412,14 +467,16 @@ biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue
 
 
 ### Planning Units
+
 Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit.
+-   NOTE: Prioritizr requires rasters to be in "RasterLayer" format, which requires converting from a 'terra' package raster to a 'raster' package raster. Sometimes this conversion throws and error (for seemingly no reason). The second time, it may convert but drop all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Double-check that they have converted properly before moving on!
 
 ```{r}
 # mask the cost by biomes to abandoned cropland raster
 # this will isolate pixels of interest (planning units) with associated cost value
 
 ssp1_pu <- mask(biomes_cost_rast, ssp1_abandoned_crop)
-ssp1_pu <- raster(ssp1_pu)# turn into prioritizr-friendly format
+ssp1_pu <- raster(ssp1_pu)   # turn into prioritizr-friendly format
 
 ssp2_pu <- mask(biomes_cost_rast, ssp2_abandoned_crop)
 ssp2_pu <- raster(ssp2_pu)
@@ -445,33 +502,123 @@ To evaluate carbon and biodiversity as features in the prioritization problem, t
 
 Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
 ```{r}
+### Feature data for whole country ---------------------------------------------
+
 ## function will mask Brazil-wide carbon and biodiversity layers
 ## by planning units for each SSP, then stack raster 
-carbon_bio_pu_mask <- function(carbon, bio, ssp) {
-  # mask brazil carbon layer with SSP pus
+mask_feat_pu_c <- function(carbon, bio, ssp) {
+  # mask brazil carbon layer with SSP pus, then convert to rastLayer
   carbon_pu_ssp <- terra::mask(carbon, ssp) 
-  # convert to from spatrast to rastlayer
   carbon_pu_ssp <- raster(carbon_pu_ssp)
   
-  # mask biodiversity layer by SSP pus
+  # mask biodiversity layer by SSP pus, then convert
   bio_pu_ssp <- terra::mask(bio, ssp)
-  # convert to rastLayer
   bio_pu_ssp <- raster(bio_pu_ssp)
   
-  # stack the raster layers
+  # stack the rastLayers
   feature_pu_ssp <- stack(carbon_pu_ssp, bio_pu_ssp)
   return(feature_pu_ssp)
 }
 
-
 ## Now use function to create feature rastStack for each SSP
 ## (in future, figure out how to loop this!)
-ssp1_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop)
-ssp2_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop)
-ssp3_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
-ssp4_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
-ssp5_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
-ssp_all_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
+ssp1_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop)
+ssp2_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop)
+ssp3_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
+ssp4_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
+ssp5_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
+ssp_all_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
+
+
+### Feature data by region -----------------------------------------------------
+
+## features for north
+mask_feat_north <- function(carbon, bio, ssp, 
+                           n, s, ne, se, cwest) {
+  # mask carbon to SSP and region then convert
+  carbon_pu_ssp <- terra::mask(carbon, ssp)
+  carbon_north <- terra::mask(carbon_pu_ssp, n)
+  carbon_north <- raster(carbon_north)
+  # mask biodiversity to SSP then convert
+  bio_pu_ssp <- terra::mask(bio, ssp)
+  bio_north <- terra::mask(bio_pu_ssp, n)
+  bio_north <- raster(bio_north)
+  # stack the rastLayers
+  feat_north <- stack(carbon_north, bio_north)
+  return(feat_north)
+}
+
+ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop,
+                              north, south, n_east, s_east, cent_west)
+ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+
+
+####### TEST ZONE ####################################################
+## if same target for all zones, can put within matrix fxn
+targ <- matrix(0.2, ncol = 2, nrow = 2)
+## if different, can customize like this for 2 zones
+targ[, 1] <- 0.2
+targ[, 2] <- 0.2
+
+z1 <- zones("zone 1" = ssp1_feat_n, "zone 2" = ssp1_feat_n)
+
+test_north <- ssp1_pu %>% 
+  mask(north)
+
+test_south <- ssp1_pu %>% 
+  mask(south)
+
+test_north <- raster(test_north)
+test_south <- raster(test_south)
+
+test_stack <- stack(test_north, test_south)
+
+p_test <- problem(test_stack, z1) %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(targ) %>% 
+  add_gurobi_solver()
+
+S_test <- solve(p_test)
+
+
+
+## features for south
+mask_feat_south <- function(carbon, bio, ssp, 
+                           n, s, ne, se, cwest) {
+  # mask carbon to SSP and region then convert
+  carbon_pu_ssp <- terra::mask(carbon, ssp)
+  carbon_north <- carbon_pu_ssp %>% 
+    crop(n) %>% 
+    mask(n)
+  carbon_north <- raster(carbon_north)
+  # mask biodiversity to SSP then convert
+  bio_pu_ssp <- terra::mask(bio, ssp)
+  bio_north <- bio_pu_ssp %>% 
+    crop(n) %>% 
+    mask(n)
+  bio_north <- raster(bio_north)
+  # stack the rastLayers
+  feat_north <- stack(carbon_north, bio_north)
+  return(feat_north)
+}
+
+ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop,
+                              north, south, n_east, s_east, cent_west)
+ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
+ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop,
+                               north, south, n_east, s_east, cent_west)
 ```
 
 
@@ -479,9 +626,9 @@ ssp_all_feat <- carbon_bio_pu_mask(carbon_brazil, bio_ext_brazil, ssp_all_abando
 
 ## Problem Formulations
 
-This is where we will start formulating the problem to be solved in prioritizr! All base problems will aim to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget. In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. Different problems will be created to observe how solutions change based on budget (low and high) as well as Brazil-wide vs zonal problems. 
+This is where we will start formulating the problem to be solved in prioritizr! All base problems will aim to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget (50%). In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. Different problems will be created to observe how solutions change based on budget (low and high) as well as Brazil-wide vs zonal problems. 
 
-Below, we'll establish base problems for all scenarios.
+Below, we'll establish base problems for Brazil-wide scenarios.
 ```{r}
 p1 <- problem(ssp1_pu, ssp1_feat) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
@@ -631,9 +778,12 @@ names(s_all_c)[2] = "ssp_all_highBud_c"
  
 
 
-### Federal unit solutions
+### Regional solutions
 
-Now we will find solutions by breaking the country down by the five Federal Units: North, Northeast, Central-West, Southeast, and South. These units are subnational entities are comprised of several states and hold a degree of self-government and regulation. 
+Now we will find solutions by breaking the country down by the five regions. 
+```{r}
+
+```
 
 
 
@@ -666,7 +816,6 @@ crs(ssp_all_sol_c) = crs(ssp1_abandoned_crop)
 writeRaster(ssp_all_sol_c, "data/outputs/ssp_all_solution_country.tif", overwrite = TRUE)
 ```
 
-NOTE: For total solution, make another solution/problem that uses combined SSP as pus so that there are more connections
 
 
 Experimenting with boundary length modifiers:
