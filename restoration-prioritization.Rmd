@@ -557,12 +557,12 @@ ssp_all_pu <- raster(ssp_all_pu)
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
 
 Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
-```{r}
-### Feature data for whole country ---------------------------------------------
 
+Here we'll create the feature raster stacks for country-wide prioritizr problems.
+```{r}
 ## function will mask Brazil-wide carbon and biodiversity layers
 ## by planning units for each SSP, then stack raster 
-mask_feat_pu_c <- function(carbon, bio, ssp) {
+mask_feat_pu <- function(carbon, bio, ssp) {
   # mask brazil carbon layer with SSP pus, then convert to rastLayer
   carbon_pu_ssp <- terra::mask(carbon, ssp) 
   carbon_pu_ssp <- raster(carbon_pu_ssp)
@@ -578,29 +578,25 @@ mask_feat_pu_c <- function(carbon, bio, ssp) {
 
 ## Now use function to create feature rastStack for each SSP
 ## (in future, figure out how to loop this!)
-ssp1_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop)
-ssp2_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop)
-ssp3_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
-ssp4_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
-ssp5_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
-ssp_all_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
+ssp1_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop)
+ssp2_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop)
+ssp3_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop)
+ssp4_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop)
+ssp5_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
+ssp_all_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
+```
 
-
-### Feature data by region -----------------------------------------------------
-
+Below we create feature stacks for region-specific prioritizr problems.
+```{r}
 ## function to creat feat stack for a given region
 mask_feat_pu_r <- function(carbon, bio, ssp, region) {
   # mask carbon to SSP and region then convert
   carbon_pu_ssp <- terra::mask(carbon, ssp)
-  carbon_reg <- carbon_pu_ssp %>% 
-    crop(region) %>% 
-    mask(region)
+  carbon_reg <- terra::crop(carbon_pu_ssp, region, mask = TRUE, touches = TRUE) 
   carbon_reg <- raster(carbon_reg)
   # mask biodiversity to SSP then convert
   bio_pu_ssp <- terra::mask(bio, ssp)
-  bio_reg <- bio_pu_ssp %>% 
-    crop(region) %>% 
-    mask(region)
+  bio_reg <- terra::crop(bio_pu_ssp, region, mask = TRUE, touches = TRUE)
   bio_reg <- raster(bio_reg)
   # stack the rastLayers
   feat_reg <- stack(carbon_reg, bio_reg)
@@ -608,46 +604,46 @@ mask_feat_pu_r <- function(carbon, bio, ssp, region) {
 }
 
 ## SSP1 feat regions 
-ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, north)
-ssp1_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, n_east)
-ssp1_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, s_east)
-ssp1_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, south)
-ssp1_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, cent_west)
+ssp1_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, north)
+ssp1_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, n_east)
+ssp1_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, s_east)
+ssp1_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, south)
+ssp1_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, cent_west)
 
 ## SSP2 feat regions 
-ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, north)
-ssp2_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, n_east)
-ssp2_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, s_east)
-ssp2_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, south)
-ssp2_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, cent_west)
+ssp2_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, north)
+ssp2_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, n_east)
+ssp2_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, s_east)
+ssp2_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, south)
+ssp2_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, cent_west)
 
 ## SSP3 feat regions 
-ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, north)
-ssp3_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, n_east)
-ssp3_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, s_east)
-ssp3_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, south)
-ssp3_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, cent_west)
+ssp3_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, north)
+ssp3_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, n_east)
+ssp3_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, s_east)
+ssp3_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, south)
+ssp3_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, cent_west)
 
 ## SSP4 feat regions 
-ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, north)
-ssp4_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, n_east)
-ssp4_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, s_east)
-ssp4_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, south)
-ssp4_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, cent_west)
+ssp4_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, north)
+ssp4_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, n_east)
+ssp4_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, s_east)
+ssp4_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, south)
+ssp4_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, cent_west)
 
 ## SSP5 feat regions 
-ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, north)
-ssp5_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, n_east)
-ssp5_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, s_east)
-ssp5_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, south)
-ssp5_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, cent_west)
+ssp5_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, north)
+ssp5_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, n_east)
+ssp5_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, s_east)
+ssp5_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, south)
+ssp5_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, cent_west)
 
 ## SSP all feat regions 
-ssp_all_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, north)
-ssp_all_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, n_east)
-ssp_all_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, s_east)
-ssp_all_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, south)
-ssp_all_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, cent_west)
+ssp_all_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, north)
+ssp_all_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, n_east)
+ssp_all_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, s_east)
+ssp_all_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, south)
+ssp_all_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, cent_west)
 
 
 
@@ -733,18 +729,18 @@ To determine the potential high-end of a budget, we looked toward the Amazon Fun
 
 ## create problems --------------
 # country-wide at low budget
-p1_lowBud_c <- p1 %>% 
+p1_lowBud <- p1 %>% 
   add_min_shortfall_objective(budget = 445.862) 
 
 # country-wide at high budget
-p1_highBud_c <- p1 %>% 
+p1_highBud <- p1 %>% 
   add_min_shortfall_objective(budget = 3400) 
 
 ## solve --------------------------
-s1_c <- stack(solve(p1_lowBud_c), solve(p1_highBud_c))
+s1 <- stack(solve(p1_lowBud), solve(p1_highBud))
 # rename rasters in stack
-names(s1_c)[1] = "ssp1_lowBud_c"
-names(s1_c)[2] = "ssp1_highBud_c"
+names(s1)[1] = "ssp1_lowBud"
+names(s1)[2] = "ssp1_highBud"
 
 ## get solution stats --------------
 # returns the number of pus chosen in solution for low budget
@@ -756,107 +752,207 @@ names(s1_c)[2] = "ssp1_highBud_c"
 
 ## create problems ----------------
 # country-wide at low budget
-p2_lowBud_c <- p2 %>% 
+p2_lowBud <- p2 %>% 
   add_min_shortfall_objective(budget = 445.862)
 
 # country-wide at high budget
-p2_highBud_c <- p2 %>% 
+p2_highBud <- p2 %>% 
   add_min_shortfall_objective(budget = 3400) 
 
 ## solve --------------------------
-s2_c <- stack(solve(p2_lowBud_c), solve(p2_highBud_c))
+s2 <- stack(solve(p2_lowBud), solve(p2_highBud))
 # rename rasters in stack
-names(s2_c)[1] = "ssp2_lowBud_c"
-names(s2_c)[2] = "ssp2_highBud_c"
+names(s2)[1] = "ssp2_lowBud"
+names(s2)[2] = "ssp2_highBud"
 
 
 ### SSP3 -----------------------------------------------------
 
 ## create problems ----------------
 # country-wide at low budget
-p3_lowBud_c <- p3 %>% 
+p3_lowBud <- p3 %>% 
   add_min_shortfall_objective(budget = 445.862)
 
 # country-wide at high budget
-p3_highBud_c <- p3 %>% 
+p3_highBud <- p3 %>% 
   add_min_shortfall_objective(budget = 3400) 
 
 ## solve --------------------------
-s3_c <- stack(solve(p3_lowBud_c), solve(p3_highBud_c))
+s3 <- stack(solve(p3_lowBud), solve(p3_highBud))
 # rename rasters in stack
-names(s3_c)[1] = "ssp3_lowBud_c"
-names(s3_c)[2] = "ssp3_highBud_c"
+names(s3)[1] = "ssp3_lowBud"
+names(s3)[2] = "ssp3_highBud"
 
 
 ### SSP4 -----------------------------------------------------
 
 ## create problems ----------------
 # country-wide at low budget
-p4_lowBud_c <- p4 %>% 
+p4_lowBud <- p4 %>% 
   add_min_shortfall_objective(budget = 445.862)
 
 # country-wide at high budget
-p4_highBud_c <- p4 %>% 
+p4_highBud <- p4 %>% 
   add_min_shortfall_objective(budget = 3400)
 
 ## solve --------------------------
-s4_c <- stack(solve(p4_lowBud_c), solve(p4_highBud_c))
+s4 <- stack(solve(p4_lowBud), solve(p4_highBud))
 # rename rasters in stack
-names(s4_c)[1] = "ssp4_lowBud_c"
-names(s4_c)[2] = "ssp4_highBud_c"
+names(s4)[1] = "ssp4_lowBud"
+names(s4)[2] = "ssp4_highBud"
 
 
 ### SSP5 -----------------------------------------------------
 
 ## create problems ----------------
 # country-wide at low budget
-p5_lowBud_c <- p5 %>% 
+p5_lowBud <- p5 %>% 
   add_min_shortfall_objective(budget = 445.862)
 
 # country-wide at high budget
-p5_highBud_c <- p5 %>% 
+p5_highBud <- p5 %>% 
   add_min_shortfall_objective(budget = 3400)
 
 ## solve --------------------------
-s5_c <- stack(solve(p5_lowBud_c), solve(p5_highBud_c))
+s5 <- stack(solve(p5_lowBud), solve(p5_highBud))
 # rename rasters in stack
-names(s5_c)[1] = "ssp5_lowBud_c"
-names(s5_c)[2] = "ssp5_highBud_c"
+names(s5)[1] = "ssp5_lowBud"
+names(s5)[2] = "ssp5_highBud"
 
 
 ### All SSPs--------------------------------------------------
 
 ## create problems ----------------
 # country-wide at low budget
-p_all_lowBud_c <- p_all %>% 
+p_all_lowBud <- p_all %>% 
   add_min_shortfall_objective(budget = 445.862)
 
 # country-wide at high budget
-p_all_highBud_c <- p_all %>% 
+p_all_highBud <- p_all %>% 
   add_min_shortfall_objective(budget = 3400) 
 
 ## solve --------------------------
-s_all_c <- stack(solve(p_all_lowBud_c), solve(p_all_highBud_c))
+s_all <- stack(solve(p_all_lowBud), solve(p_all_highBud))
 # rename rasters in stack
-names(s_all_c)[1] = "ssp_all_lowBud_c"
-names(s_all_c)[2] = "ssp_all_highBud_c"
+names(s_all)[1] = "ssp_all_lowBud"
+names(s_all)[2] = "ssp_all_highBud"
 ```
  
 
 
 ### Regional solutions
 
-Now we will find solutions by breaking the country down by the five regions. 
+Now we will find solutions by breaking the country down by the five regions. We'll create a base problem with a prioritizr function, then use that to find solutions by region and SSP. [info on budget numbers]
 ```{r}
-p1_lowBud_n <- problem(ssp1_pu_n, ssp1_feat_n) %>% 
-  add_relative_targets(c(0.5, 0.5)) %>% 
-  add_min_shortfall_objective(37.91) %>% 
-  add_gurobi_solver(gap = 0.05)
+## create fxn for problem creating
+## can't include solving in fxn because eval fxns require calling
+## on both the problem and the solution
+p_func <- function(pu, feat, targ, budget) {
+  p <- prioritizr::problem(pu, feat) %>% 
+    add_relative_targets(targ) %>% 
+    add_min_shortfall_objective(budget) %>% 
+    add_gurobi_solver(gap = 0.05)
+  return(p)
+}
 
-p1_highBud_n <- problem(ssp1_pu_n, ssp1_feat_n) %>% 
-  add_relative_targets(c(0.5, 0.5)) %>% 
-  add_min_shortfall_objective(289.089) %>% 
-  add_gurobi_solver(gap = 0.05)
+### North Region ---------------------------------------------------------
+## SSP1 
+p1_lowBud_n <- p_func(ssp1_pu_n, ssp1_feat_n, c(0.5, 0.5), 37.91)
+p1_highBud_n <- p_func(ssp1_pu_n, ssp1_feat_n, c(0.5, 0.5), 289.089)
+
+s1_n <- stack(solve(p1_lowBud_n), solve(p1_highBud_n))
+names(s1_n)[1] = "ssp1_lowBud_n"
+names(s1_n)[2] = "ssp1_highBud_n"
+
+## SSP2
+p2_lowBud_n <- p_func(ssp2_pu_n, ssp2_feat_n, c(0.5, 0.5), 37.91)
+p2_highBud_n <- p_func(ssp2_pu_n, ssp2_feat_n, c(0.5, 0.5), 289.089)
+
+s2_n <- stack(solve(p2_lowBud_n), solve(p2_highBud_n))
+names(s2_n)[1] = "ssp2_lowBud_n"
+names(s2_n)[2] = "ssp2_highBud_n"
+
+## SSP3
+p3_lowBud_n <- p_func(ssp3_pu_n, ssp3_feat_n, c(0.5, 0.5), 37.91)
+p3_highBud_n <- p_func(ssp3_pu_n, ssp3_feat_n, c(0.5, 0.5), 289.089)
+
+s3_n <- stack(solve(p3_lowBud_n), solve(p3_highBud_n))
+names(s3_n)[1] = "ssp3_lowBud_n"
+names(s3_n)[2] = "ssp3_highBud_n"
+
+## SSP4 
+p4_lowBud_n <- p_func(ssp4_pu_n, ssp4_feat_n, c(0.5, 0.5), 37.91)
+p4_highBud_n <- p_func(ssp4_pu_n, ssp4_feat_n, c(0.5, 0.5), 289.089)
+
+s4_n <- stack(solve(p4_lowBud_n), solve(p4_highBud_n))
+names(s4_n)[1] = "ssp4_lowBud_n"
+names(s4_n)[2] = "ssp4_highBud_n"
+
+## SSP5
+p5_lowBud_n <- p_func(ssp5_pu_n, ssp5_feat_n, c(0.5, 0.5), 37.91)
+p5_highBud_n <- p_func(ssp5_pu_n, ssp5_feat_n, c(0.5, 0.5), 289.089)
+
+s5_n <- stack(solve(p5_lowBud_n), solve(p5_highBud_n))
+names(s5_n)[1] = "ssp5_lowBud_n"
+names(s5_n)[2] = "ssp5_highBud_n"
+
+## All SSPs
+p_all_lowBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(0.5, 0.5), 37.91)
+p_all_highBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(0.5, 0.5), 289.089)
+
+s_all_n <- stack(solve(p_all_lowBud_n), solve(p_all_highBud_n))
+names(s_all_n)[1] = "ssp_all_lowBud_n"
+names(s_all_n)[2] = "ssp_all_highBud_n"
+
+
+### North-east Region ---------------------------------------------------------
+## SSP1 
+p1_lowBud_neast <- p_func(ssp1_pu_neast, ssp1_feat_neast, c(0.5, 0.5), 11.059)
+p1_highBud_neast <- p_func(ssp1_pu_neast, ssp1_feat_neast, c(0.5, 0.5), 84.333)
+
+s1_neast <- stack(solve(p1_lowBud_neast), solve(p1_highBud_neast))
+names(s1_neast)[1] = "ssp1_lowBud_neast"
+names(s1_neast)[2] = "ssp1_highBud_neast"
+
+## SSP2
+p2_lowBud_neast <- p_func(ssp2_pu_neast, ssp2_feat_neast, c(0.5, 0.5), 11.059)
+p2_highBud_neast <- p_func(ssp2_pu_neast, ssp2_feat_neast, c(0.5, 0.5), 84.333)
+
+s2_neast <- stack(solve(p2_lowBud_neast), solve(p2_highBud_neast))
+names(s2_neast)[1] = "ssp2_lowBud_neast"
+names(s2_neast)[2] = "ssp2_highBud_neast"
+
+## SSP3
+p3_lowBud_neast <- p_func(ssp3_pu_neast, ssp3_feat_neast, c(0.5, 0.5), 11.059)
+p3_highBud_neast <- p_func(ssp3_pu_neast, ssp3_feat_neast, c(0.5, 0.5), 84.333)
+
+s3_neast <- stack(solve(p3_lowBud_neast), solve(p3_highBud_neast))
+names(s3_neast)[1] = "ssp3_lowBud_neast"
+names(s3_neast)[2] = "ssp3_highBud_neast"
+
+## SSP4 
+p4_lowBud_neast <- p_func(ssp4_pu_neast, ssp4_feat_neast, c(0.5, 0.5), 11.059)
+p4_highBud_neast <- p_func(ssp4_pu_neast, ssp4_feat_neast, c(0.5, 0.5), 84.333)
+
+s4_neast <- stack(solve(p4_lowBud_neast), solve(p4_highBud_neast))
+names(s4_neast)[1] = "ssp4_lowBud_neast"
+names(s4_neast)[2] = "ssp4_highBud_neast"
+
+## SSP5
+p5_lowBud_neast <- p_func(ssp5_pu_neast, ssp5_feat_neast, c(0.5, 0.5), 11.059)
+p5_highBud_neast <- p_func(ssp5_pu_neast, ssp5_feat_neast, c(0.5, 0.5), 84.333)
+
+s5_neast <- stack(solve(p5_lowBud_neast), solve(p5_highBud_neast))
+names(s5_neast)[1] = "ssp5_lowBud_neast"
+names(s5_neast)[2] = "ssp5_highBud_neast"
+
+## All SSPs
+p_all_lowBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(0.5, 0.5), 11.059)
+p_all_highBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(0.5, 0.5), 84.333)
+
+s_all_neast <- stack(solve(p_all_lowBud_neast), solve(p_all_highBud_neast))
+names(s_all_neast)[1] = "ssp_all_lowBud_neast"
+names(s_all_neast)[2] = "ssp_all_highBud_neast"
 ```
 
 
