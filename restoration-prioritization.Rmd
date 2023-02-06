@@ -469,28 +469,84 @@ biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue
 ### Planning Units
 
 Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit.
--   NOTE: Prioritizr requires rasters to be in "RasterLayer" format, which requires converting from a 'terra' package raster to a 'raster' package raster. Sometimes this conversion throws and error (for seemingly no reason). The second time, it may convert but drop all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Double-check that they have converted properly before moving on!
-
 ```{r}
 # mask the cost by biomes to abandoned cropland raster
 # this will isolate pixels of interest (planning units) with associated cost value
-
 ssp1_pu <- mask(biomes_cost_rast, ssp1_abandoned_crop)
-ssp1_pu <- raster(ssp1_pu)   # turn into prioritizr-friendly format
-
 ssp2_pu <- mask(biomes_cost_rast, ssp2_abandoned_crop)
-ssp2_pu <- raster(ssp2_pu)
-
 ssp3_pu <- mask(biomes_cost_rast, ssp3_abandoned_crop)
-ssp3_pu <- raster(ssp3_pu)
-
 ssp4_pu <- mask(biomes_cost_rast, ssp4_abandoned_crop)
-ssp4_pu <- raster(ssp4_pu)
-
 ssp5_pu <- mask(biomes_cost_rast, ssp5_abandoned_crop)
-ssp5_pu <- raster(ssp5_pu)
-
 ssp_all_pu <- mask(biomes_cost_rast, ssp_all_abandoned_crop)
+
+```
+
+
+#### PUs for regional solutions
+Take our cost-valued planning units and crop/mask them to a given region
+```{r}
+## function to crop/mask PUs for a given region
+mask_pu_r <- function(ssp, region) {
+  ssp_pu <- ssp %>% 
+    terra::crop(region, mask = TRUE, touches = TRUE)
+  
+  ssp_pu <- raster(ssp_pu)
+  return(ssp_pu)
+}
+
+## SSP1 ----------------------------------------
+ssp1_pu_n <- mask_pu_r(ssp1_pu, north)
+ssp1_pu_neast <- mask_pu_r(ssp1_pu, n_east)
+ssp1_pu_seast <- mask_pu_r(ssp1_pu, s_east)
+ssp1_pu_s <- mask_pu_r(ssp1_pu, south)
+ssp1_pu_cwest <- mask_pu_r(ssp1_pu, cent_west)
+
+## SSP2 ----------------------------------------
+ssp2_pu_n <- mask_pu_r(ssp2_pu, north)
+ssp2_pu_neast <- mask_pu_r(ssp2_pu, n_east)
+ssp2_pu_seast <- mask_pu_r(ssp2_pu, s_east)
+ssp2_pu_s <- mask_pu_r(ssp2_pu, south)
+ssp2_pu_cwest <- mask_pu_r(ssp2_pu, cent_west)
+
+## SSP3 ----------------------------------------
+ssp3_pu_n <- mask_pu_r(ssp3_pu, north)
+ssp3_pu_neast <- mask_pu_r(ssp3_pu, n_east)
+ssp3_pu_seast <- mask_pu_r(ssp3_pu, s_east)
+ssp3_pu_s <- mask_pu_r(ssp3_pu, south)
+ssp3_pu_cwest <- mask_pu_r(ssp3_pu, cent_west)
+
+## SSP4 ----------------------------------------
+ssp4_pu_n <- mask_pu_r(ssp4_pu, north)
+ssp4_pu_neast <- mask_pu_r(ssp4_pu, n_east)
+ssp4_pu_seast <- mask_pu_r(ssp4_pu, s_east)
+ssp4_pu_s <- mask_pu_r(ssp4_pu, south)
+ssp4_pu_cwest <- mask_pu_r(ssp4_pu, cent_west)
+
+## SSP5 ----------------------------------------
+ssp5_pu_n <- mask_pu_r(ssp5_pu, north)
+ssp5_pu_neast <- mask_pu_r(ssp5_pu, n_east)
+ssp5_pu_seast <- mask_pu_r(ssp5_pu, s_east)
+ssp5_pu_s <- mask_pu_r(ssp5_pu, south)
+ssp5_pu_cwest <- mask_pu_r(ssp5_pu, cent_west)
+
+## SSP All ----------------------------------------
+ssp_all_pu_n <- mask_pu_r(ssp_all_pu, north)
+ssp_all_pu_neast <- mask_pu_r(ssp_all_pu, n_east)
+ssp_all_pu_seast <- mask_pu_r(ssp_all_pu, s_east)
+ssp_all_pu_s <- mask_pu_r(ssp_all_pu, south)
+ssp_all_pu_cwest <- mask_pu_r(ssp_all_pu, cent_west)
+```
+
+
+
+#### PUs for Brazil-wide solutions
+Prioritizr requires rasters to be in "RasterLayer" format, which requires converting from a 'terra' package raster to a 'raster' package raster. Sometimes this conversion throws and error (for seemingly no reason). The second time, it may convert but drop all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Double-check that they have converted properly before moving on!
+```{r}
+ssp1_pu <- raster(ssp1_pu)
+ssp2_pu <- raster(ssp2_pu)
+ssp3_pu <- raster(ssp3_pu)
+ssp4_pu <- raster(ssp4_pu)
+ssp5_pu <- raster(ssp5_pu)
 ssp_all_pu <- raster(ssp_all_pu)
 ```
 
@@ -536,11 +592,15 @@ ssp_all_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_
 mask_feat_pu_r <- function(carbon, bio, ssp, region) {
   # mask carbon to SSP and region then convert
   carbon_pu_ssp <- terra::mask(carbon, ssp)
-  carbon_reg <- terra::mask(carbon_pu_ssp, region)
+  carbon_reg <- carbon_pu_ssp %>% 
+    crop(region) %>% 
+    mask(region)
   carbon_reg <- raster(carbon_reg)
   # mask biodiversity to SSP then convert
   bio_pu_ssp <- terra::mask(bio, ssp)
-  bio_reg <- terra::mask(bio_pu_ssp, region)
+  bio_reg <- bio_pu_ssp %>% 
+    crop(region) %>% 
+    mask(region)
   bio_reg <- raster(bio_reg)
   # stack the rastLayers
   feat_reg <- stack(carbon_reg, bio_reg)
@@ -554,7 +614,40 @@ ssp1_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned
 ssp1_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, south)
 ssp1_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, cent_west)
 
+## SSP2 feat regions 
+ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, north)
+ssp2_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, n_east)
+ssp2_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, s_east)
+ssp2_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, south)
+ssp2_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, cent_west)
 
+## SSP3 feat regions 
+ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, north)
+ssp3_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, n_east)
+ssp3_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, s_east)
+ssp3_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, south)
+ssp3_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, cent_west)
+
+## SSP4 feat regions 
+ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, north)
+ssp4_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, n_east)
+ssp4_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, s_east)
+ssp4_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, south)
+ssp4_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, cent_west)
+
+## SSP5 feat regions 
+ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, north)
+ssp5_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, n_east)
+ssp5_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, s_east)
+ssp5_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, south)
+ssp5_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, cent_west)
+
+## SSP all feat regions 
+ssp_all_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, north)
+ssp_all_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, n_east)
+ssp_all_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, s_east)
+ssp_all_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, south)
+ssp_all_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, cent_west)
 
 
 
@@ -755,7 +848,15 @@ names(s_all_c)[2] = "ssp_all_highBud_c"
 
 Now we will find solutions by breaking the country down by the five regions. 
 ```{r}
+p1_lowBud_n <- problem(ssp1_pu_n, ssp1_feat_n) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
+  add_min_shortfall_objective(37.91) %>% 
+  add_gurobi_solver(gap = 0.05)
 
+p1_highBud_n <- problem(ssp1_pu_n, ssp1_feat_n) %>% 
+  add_relative_targets(c(0.5, 0.5)) %>% 
+  add_min_shortfall_objective(289.089) %>% 
+  add_gurobi_solver(gap = 0.05)
 ```
 
 
