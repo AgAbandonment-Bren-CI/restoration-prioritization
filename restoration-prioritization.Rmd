@@ -532,56 +532,59 @@ ssp_all_feat <- mask_feat_pu_c(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_
 
 ### Feature data by region -----------------------------------------------------
 
-## features for north
-mask_feat_north <- function(carbon, bio, ssp, 
-                           n, s, ne, se, cwest) {
+## function to creat feat stack for a given region
+mask_feat_pu_r <- function(carbon, bio, ssp, region) {
   # mask carbon to SSP and region then convert
   carbon_pu_ssp <- terra::mask(carbon, ssp)
-  carbon_north <- terra::mask(carbon_pu_ssp, n)
-  carbon_north <- raster(carbon_north)
+  carbon_reg <- terra::mask(carbon_pu_ssp, region)
+  carbon_reg <- raster(carbon_reg)
   # mask biodiversity to SSP then convert
   bio_pu_ssp <- terra::mask(bio, ssp)
-  bio_north <- terra::mask(bio_pu_ssp, n)
-  bio_north <- raster(bio_north)
+  bio_reg <- terra::mask(bio_pu_ssp, region)
+  bio_reg <- raster(bio_reg)
   # stack the rastLayers
-  feat_north <- stack(carbon_north, bio_north)
-  return(feat_north)
+  feat_reg <- stack(carbon_reg, bio_reg)
+  return(feat_reg)
 }
 
-ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop,
-                              north, south, n_east, s_east, cent_west)
-ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
+## SSP1 feat regions 
+ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, north)
+ssp1_feat_neast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, n_east)
+ssp1_feat_seast <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, s_east)
+ssp1_feat_s <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, south)
+ssp1_feat_cwest <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, cent_west)
+
+
+
+
 
 
 ####### TEST ZONE ####################################################
 ## if same target for all zones, can put within matrix fxn
-targ <- matrix(0.2, ncol = 2, nrow = 2)
+targ <- matrix(0.2, ncol = 5, nrow = 2)
 ## if different, can customize like this for 2 zones
 targ[, 1] <- 0.2
 targ[, 2] <- 0.2
 
-z1 <- zones("zone 1" = ssp1_feat_n, "zone 2" = ssp1_feat_n)
+z1 <- zones("zone1" = ssp1_feat_n, "zone2" = ssp1_feat_neast, "zone3" = ssp1_feat_seast,
+            "zone4" = ssp1_feat_s, "zone5" = ssp1_feat_cwest)
 
-test_north <- ssp1_pu %>% 
-  mask(north)
-
-test_south <- ssp1_pu %>% 
-  mask(south)
+test_north <- mask(ssp1_pu, north)
+test_neast <- mask(ssp1_pu, n_east)
+test_seast <- mask(ssp1_pu, s_east)
+test_south <- mask(ssp1_pu, south)
+test_cwest <- mask(ssp1_pu, cent_west)
 
 test_north <- raster(test_north)
+test_neast <- raster(test_neast)
+test_seast <- raster(test_seast)
 test_south <- raster(test_south)
+test_cwest <- raster(test_cwest)
 
-test_stack <- stack(test_north, test_south)
+test_pu_stack <- stack(test_north, test_neast, test_seast, test_south, test_cwest)
 
-p_test <- problem(test_stack, z1) %>% 
-  add_min_set_objective() %>% 
+p_test <- problem(test_pu_stack, z1) %>% 
+  add_min_shortfall_objective(3400) %>% 
   add_relative_targets(targ) %>% 
   add_gurobi_solver()
 
@@ -589,36 +592,6 @@ S_test <- solve(p_test)
 
 
 
-## features for south
-mask_feat_south <- function(carbon, bio, ssp, 
-                           n, s, ne, se, cwest) {
-  # mask carbon to SSP and region then convert
-  carbon_pu_ssp <- terra::mask(carbon, ssp)
-  carbon_north <- carbon_pu_ssp %>% 
-    crop(n) %>% 
-    mask(n)
-  carbon_north <- raster(carbon_north)
-  # mask biodiversity to SSP then convert
-  bio_pu_ssp <- terra::mask(bio, ssp)
-  bio_north <- bio_pu_ssp %>% 
-    crop(n) %>% 
-    mask(n)
-  bio_north <- raster(bio_north)
-  # stack the rastLayers
-  feat_north <- stack(carbon_north, bio_north)
-  return(feat_north)
-}
-
-ssp1_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop,
-                              north, south, n_east, s_east, cent_west)
-ssp2_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp3_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp4_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
-ssp5_feat_n <- mask_feat_north(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop,
-                               north, south, n_east, s_east, cent_west)
 ```
 
 
