@@ -482,7 +482,7 @@ ssp_all_pu <- mask(biomes_cost_rast, ssp_all_abandoned_crop)
 ```
 
 
-#### PUs for regional solutions
+#### Regional PUs
 Take our cost-valued planning units and crop/mask them to a given region
 ```{r}
 ## function to crop/mask PUs for a given region
@@ -539,7 +539,7 @@ ssp_all_pu_cwest <- mask_pu_r(ssp_all_pu, cent_west)
 
 
 
-#### PUs for Brazil-wide solutions
+#### Brazil-wide PUs
 Prioritizr requires rasters to be in "RasterLayer" format, which requires converting from a 'terra' package raster to a 'raster' package raster. Sometimes this conversion throws and error (for seemingly no reason). The second time, it may convert but drop all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Double-check that they have converted properly before moving on!
 ```{r}
 ssp1_pu <- raster(ssp1_pu)
@@ -558,6 +558,7 @@ To evaluate carbon and biodiversity as features in the prioritization problem, t
 
 Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
 
+#### Brazil-wide features
 Here we'll create the feature raster stacks for country-wide prioritizr problems.
 ```{r}
 ## function will mask Brazil-wide carbon and biodiversity layers
@@ -586,6 +587,9 @@ ssp5_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop)
 ssp_all_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop)
 ```
 
+
+
+#### Regional features
 Below we create feature stacks for region-specific prioritizr problems.
 ```{r}
 ## function to creat feat stack for a given region
@@ -897,8 +901,8 @@ names(s5_n)[1] = "ssp5_lowBud_n"
 names(s5_n)[2] = "ssp5_highBud_n"
 
 ## All SSPs
-p_all_lowBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(0.5, 0.5), 37.91)
-p_all_highBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(0.5, 0.5), 289.089)
+p_all_lowBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(1, 1), 37.91)
+p_all_highBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(1, 1), 289.089)
 
 s_all_n <- stack(solve(p_all_lowBud_n), solve(p_all_highBud_n))
 names(s_all_n)[1] = "ssp_all_lowBud_n"
@@ -947,12 +951,167 @@ names(s5_neast)[1] = "ssp5_lowBud_neast"
 names(s5_neast)[2] = "ssp5_highBud_neast"
 
 ## All SSPs
-p_all_lowBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(0.5, 0.5), 11.059)
-p_all_highBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(0.5, 0.5), 84.333)
+p_all_lowBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(1, 1), 11.059)
+p_all_highBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(1, 1), 84.333)
 
 s_all_neast <- stack(solve(p_all_lowBud_neast), solve(p_all_highBud_neast))
 names(s_all_neast)[1] = "ssp_all_lowBud_neast"
 names(s_all_neast)[2] = "ssp_all_highBud_neast"
+
+
+### South-east Region ---------------------------------------------------------
+## SSP1 
+p1_lowBud_seast <- p_func(ssp1_pu_seast, ssp1_feat_seast, c(0.5, 0.5), 0.40956)
+p1_highBud_seast <- p_func(ssp1_pu_seast, ssp1_feat_seast, c(0.5, 0.5), 3.123)
+
+s1_seast <- stack(solve(p1_lowBud_seast), solve(p1_highBud_seast))
+names(s1_seast)[1] = "ssp1_lowBud_seast"
+names(s1_seast)[2] = "ssp1_highBud_seast"
+
+## SSP2
+p2_lowBud_seast <- p_func(ssp2_pu_seast, ssp2_feat_seast, c(0.5, 0.5), 0.40956)
+p2_highBud_seast <- p_func(ssp2_pu_seast, ssp2_feat_seast, c(0.5, 0.5), 3.123)
+
+s2_seast <- stack(solve(p2_lowBud_seast), solve(p2_highBud_seast))
+names(s2_seast)[1] = "ssp2_lowBud_seast"
+names(s2_seast)[2] = "ssp2_highBud_seast"
+
+## SSP3
+p3_lowBud_seast <- p_func(ssp3_pu_seast, ssp3_feat_seast, c(0.5, 0.5), 0.40956)
+p3_highBud_seast <- p_func(ssp3_pu_seast, ssp3_feat_seast, c(0.5, 0.5), 3.123)
+
+s3_seast <- stack(solve(p3_lowBud_seast), solve(p3_highBud_seast))
+names(s3_seast)[1] = "ssp3_lowBud_seast"
+names(s3_seast)[2] = "ssp3_highBud_seast"
+
+## SSP4 
+p4_lowBud_seast <- p_func(ssp4_pu_seast, ssp4_feat_seast, c(0.5, 0.5), 0.40956)
+p4_highBud_seast <- p_func(ssp4_pu_seast, ssp4_feat_seast, c(0.5, 0.5), 3.123)
+
+s4_seast <- stack(solve(p4_lowBud_seast), solve(p4_highBud_seast))
+names(s4_seast)[1] = "ssp4_lowBud_seast"
+names(s4_seast)[2] = "ssp4_highBud_seast"
+
+## SSP5
+p5_lowBud_seast <- p_func(ssp5_pu_seast, ssp5_feat_seast, c(0.5, 0.5), 0.40956)
+p5_highBud_seast <- p_func(ssp5_pu_seast, ssp5_feat_seast, c(0.5, 0.5), 3.123)
+
+s5_seast <- stack(solve(p5_lowBud_seast), solve(p5_highBud_seast))
+names(s5_seast)[1] = "ssp5_lowBud_seast"
+names(s5_seast)[2] = "ssp5_highBud_seast"
+
+## All SSPs
+p_all_lowBud_seast <- p_func(ssp_all_pu_seast, ssp_all_feat_seast, c(1, 1), 0.40956)
+p_all_highBud_seast <- p_func(ssp_all_pu_seast, ssp_all_feat_seast, c(1,1), 3.123)
+
+s <- solve(p_all_highBud_seast)
+
+s_all_seast <- stack(solve(p_all_lowBud_seast), solve(p_all_highBud_seast))
+names(s_all_seast)[1] = "ssp_all_lowBud_seast"
+names(s_all_seast)[2] = "ssp_all_highBud_seast"
+
+
+
+### South Region ---------------------------------------------------------
+## SSP1 
+p1_lowBud_s <- p_func(ssp1_pu_s, ssp1_feat_s, c(0.5, 0.5), 0.036)
+p1_highBud_s <- p_func(ssp1_pu_s, ssp1_feat_s, c(0.5, 0.5), 0.2736)
+
+s1_s <- stack(solve(p1_lowBud_s), solve(p1_highBud_s))
+names(s1_s)[1] = "ssp1_lowBud_s"
+names(s1_s)[2] = "ssp1_highBud_s"
+
+## SSP2
+p2_lowBud_s <- p_func(ssp2_pu_s, ssp2_feat_s, c(0.5, 0.5), 0.036)
+p2_highBud_s <- p_func(ssp2_pu_s, ssp2_feat_s, c(0.5, 0.5), 0.2736)
+
+s2_s <- stack(solve(p2_lowBud_s), solve(p2_highBud_s))
+names(s2_s)[1] = "ssp2_lowBud_s"
+names(s2_s)[2] = "ssp2_highBud_s"
+
+## SSP3
+p3_lowBud_s <- p_func(ssp3_pu_s, ssp3_feat_s, c(0.5, 0.5), 0.036)
+p3_highBud_s <- p_func(ssp3_pu_s, ssp3_feat_s, c(0.5, 0.5), 0.2736)
+
+s3_s <- stack(solve(p3_lowBud_s), solve(p3_highBud_s))
+names(s3_s)[1] = "ssp3_lowBud_s"
+names(s3_s)[2] = "ssp3_highBud_s"
+
+## SSP4 
+p4_lowBud_s <- p_func(ssp4_pu_s, ssp4_feat_s, c(0.5, 0.5), 0.036)
+p4_highBud_s <- p_func(ssp4_pu_s, ssp4_feat_s, c(0.5, 0.5), 0.2736)
+
+s4_s <- stack(solve(p4_lowBud_s), solve(p4_highBud_s))
+names(s4_s)[1] = "ssp4_lowBud_s"
+names(s4_s)[2] = "ssp4_highBud_s"
+
+## SSP5
+p5_lowBud_s <- p_func(ssp5_pu_s, ssp5_feat_s, c(0.5, 0.5), 0.036)
+p5_highBud_s <- p_func(ssp5_pu_s, ssp5_feat_s, c(0.5, 0.5), 0.2736)
+
+s5_s <- stack(solve(p5_lowBud_s), solve(p5_highBud_s))
+names(s5_s)[1] = "ssp5_lowBud_s"
+names(s5_s)[2] = "ssp5_highBud_s"
+
+## All SSPs
+p_all_lowBud_s <- p_func(ssp_all_pu_s, ssp_all_feat_s, c(1, 1), 0.036)
+p_all_highBud_s <- p_func(ssp_all_pu_s, ssp_all_feat_s, c(1, 1), 0.2736)
+
+s_all_s <- stack(solve(p_all_lowBud_s), solve(p_all_highBud_s))
+names(s_all_s)[1] = "ssp_all_lowBud_s"
+names(s_all_s)[2] = "ssp_all_highBud_s"
+
+
+
+### Central-West Region ---------------------------------------------------------
+## SSP1 
+p1_lowBud_cwest <- p_func(ssp1_pu_cwest, ssp1_feat_cwest, c(0.5, 0.5), 0.902)
+p1_highBud_cwest <- p_func(ssp1_pu_cwest, ssp1_feat_cwest, c(0.5, 0.5), 6.878)
+
+s1_cwest <- stack(solve(p1_lowBud_cwest), solve(p1_highBud_cwest))
+names(s1_cwest)[1] = "ssp1_lowBud_cwest"
+names(s1_cwest)[2] = "ssp1_highBud_cwest"
+
+## SSP2
+p2_lowBud_cwest <- p_func(ssp2_pu_cwest, ssp2_feat_cwest, c(0.5, 0.5), 0.902)
+p2_highBud_cwest <- p_func(ssp2_pu_cwest, ssp2_feat_cwest, c(0.5, 0.5), 6.878)
+
+s2_cwest <- stack(solve(p2_lowBud_cwest), solve(p2_highBud_cwest))
+names(s2_cwest)[1] = "ssp2_lowBud_cwest"
+names(s2_cwest)[2] = "ssp2_highBud_cwest"
+
+## SSP3
+p3_lowBud_cwest <- p_func(ssp3_pu_cwest, ssp3_feat_cwest, c(0.5, 0.5), 0.902)
+p3_highBud_cwest <- p_func(ssp3_pu_cwest, ssp3_feat_cwest, c(0.5, 0.5), 6.878)
+
+s3_cwest <- stack(solve(p3_lowBud_cwest), solve(p3_highBud_cwest))
+names(s3_cwest)[1] = "ssp3_lowBud_cwest"
+names(s3_cwest)[2] = "ssp3_highBud_cwest"
+
+## SSP4 
+p4_lowBud_cwest <- p_func(ssp4_pu_cwest, ssp4_feat_cwest, c(0.5, 0.5), 0.902)
+p4_highBud_cwest <- p_func(ssp4_pu_cwest, ssp4_feat_cwest, c(0.5, 0.5), 6.878)
+
+s4_cwest <- stack(solve(p4_lowBud_cwest), solve(p4_highBud_cwest))
+names(s4_cwest)[1] = "ssp4_lowBud_cwest"
+names(s4_cwest)[2] = "ssp4_highBud_cwest"
+
+## SSP5
+p5_lowBud_cwest <- p_func(ssp5_pu_cwest, ssp5_feat_cwest, c(0.5, 0.5), 0.902)
+p5_highBud_cwest <- p_func(ssp5_pu_cwest, ssp5_feat_cwest, c(0.5, 0.5), 6.878)
+
+s5_cwest <- stack(solve(p5_lowBud_cwest), solve(p5_highBud_cwest))
+names(s5_cwest)[1] = "ssp5_lowBud_cwest"
+names(s5_cwest)[2] = "ssp5_highBud_cwest"
+
+## All SSPs
+p_all_lowBud_cwest <- p_func(ssp_all_pu_cwest, ssp_all_feat_cwest, c(1, 1), 0.902)
+p_all_highBud_cwest <- p_func(ssp_all_pu_cwest, ssp_all_feat_cwest, c(1, 1), 6.878)
+
+s_all_cwest <- stack(solve(p_all_lowBud_cwest), solve(p_all_highBud_cwest))
+names(s_all_cwest)[1] = "ssp_all_lowBud_cwest"
+names(s_all_cwest)[2] = "ssp_all_highBud_cwest"
+
 ```
 
 
@@ -961,29 +1120,54 @@ names(s_all_neast)[2] = "ssp_all_highBud_neast"
 ```{r}
 ## convert RasterLayers solutions back to SpatRast and export
 ## these are raster stacks: first layer is low budget and second for high
-ssp1_sol_c <- rast(s1_c)
-crs(ssp1_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp1_sol_c, "data/outputs/ssp1_solution_country.tif", overwrite = TRUE)
+ssp1_sol <- rast(s1)
+crs(ssp1_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp1_sol, "data/outputs/ssp1_solution_country.tif", overwrite = TRUE)
 
-ssp2_sol_c <- rast(s2_c)
-crs(ssp2_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp2_sol_c, "data/outputs/ssp2_solution_country.tif", overwrite = TRUE)
+ssp2_sol <- rast(s2)
+crs(ssp2_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp2_sol, "data/outputs/ssp2_solution_country.tif", overwrite = TRUE)
 
-ssp3_sol_c <- rast(s3_c)
-crs(ssp3_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp3_sol_c, "data/outputs/ssp3_solution_country.tif", overwrite = TRUE)
+ssp3_sol <- rast(s3)
+crs(ssp3_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp3_sol, "data/outputs/ssp3_solution_country.tif", overwrite = TRUE)
 
-ssp4_sol_c <- rast(s4_c)
-crs(ssp4_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp4_sol_c, "data/outputs/ssp4_solution_country.tif", overwrite = TRUE)
+ssp4_sol <- rast(s4)
+crs(ssp4_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp4_sol, "data/outputs/ssp4_solution_country.tif", overwrite = TRUE)
 
-ssp5_sol_c <- rast(s5_c)
-crs(ssp5_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp5_sol_c, "data/outputs/ssp5_solution_country.tif", overwrite = TRUE)
+ssp5_sol <- rast(s5)
+crs(ssp5_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp5_sol, "data/outputs/ssp5_solution_country.tif", overwrite = TRUE)
 
-ssp_all_sol_c <- rast(s_all_c)
-crs(ssp_all_sol_c) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_c, "data/outputs/ssp_all_solution_country.tif", overwrite = TRUE)
+ssp_all_sol <- rast(s_all)
+crs(ssp_all_sol) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol, "data/outputs/ssp_all_solution_country.tif", overwrite = TRUE)
+```
+
+
+
+Saving some regional stuff (but may not use later)
+```{r}
+ssp_all_sol_n <- rast(s_all_n)
+crs(ssp_all_sol_n) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_n, "data/outputs/ssp_all_solution_north.tif", overwrite = TRUE)
+
+ssp_all_sol_neast <- rast(s_all_neast)
+crs(ssp_all_sol_neast) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_neast, "data/outputs/ssp_all_solution_northeast.tif", overwrite = TRUE)
+
+ssp_all_sol_seast <- rast(s_all_seast)
+crs(ssp_all_sol_seast) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_seast, "data/outputs/ssp_all_solution_southeast.tif", overwrite = TRUE)
+
+ssp_all_sol_s <- rast(s_all_s)
+crs(ssp_all_sol_s) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_s, "data/outputs/ssp_all_solution_south.tif", overwrite = TRUE)
+
+ssp_all_sol_cwest <- rast(s_all_cwest)
+crs(ssp_all_sol_cwest) = crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_sol_cwest, "data/outputs/ssp_all_solution_central_west.tif", overwrite = TRUE)
 ```
 
 
@@ -1055,7 +1239,7 @@ Things to-do:
 ```{r}
 # reclass the planning unit layers so each cell has a value of 1
 # easier for zonal stats
-df <- c(1, 3200, 1)
+df <- c(0, 3200, 1)
 m <- matrix(df, ncol = 3, byrow = TRUE)
 
 pu1 <- classify(ssp1_pu, m) 
@@ -1068,6 +1252,8 @@ pu4 <- classify(ssp4_pu, m)
 names(pu4) <- "pu4"
 pu5 <- classify(ssp5_pu, m)
 names(pu5) <- "pu5"
+pu_all <- classify(ssp_all_pu, m)
+names(pu_all) <- 'pu_all'
 
 # Counts ----------------------------------------------------------------------
 ## How many pus were available?
@@ -1124,6 +1310,21 @@ total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) +
 
 
 # Zonal Stats------------------------------------------------------------------
+
+
+## By Region --------------------------------
+regions_rast <- rasterize(x = regions_vect,
+                          y = ssp1_abandoned_crop,
+                          field = "name_region")
+regions_rast_noPant <- mask(regions_rast, pantanal, inverse = TRUE, updatevalue = NA)
+
+## find how many pus per region
+ssp_all_zs_pu_region <- zonal(pu_all, regions_rast, 'sum', na.rm = TRUE)
+
+## find how many pus were *prioritized* in each biome
+ssp_all_zs_sol_region <- zonal(ssp_all_sol, regions_rast, "sum", na.rm = TRUE)
+
+
 
 ## By Biome --------------------------------
 ### make raster with biome codes as values
