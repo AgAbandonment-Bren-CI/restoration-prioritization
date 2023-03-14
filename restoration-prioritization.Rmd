@@ -32,10 +32,13 @@ Discuss overall purpose of this analysis.
 
 
 ## Read in data{.tabset}
+
 First we will read in all the data necessary for formulating and solving the prioritization problem. Broadly, this includes the planning units (locations of projected cropland abandonment), various features (benefits to biodiversity and carbon), and costs of restoration.
 
 
+
 ### Cropland Abandonment
+
 Read in areas of projected cropland abandonment for five different SSP scenarios in Brazil. These rasters were generated from code located in the `abandoned-cropland` repository, which provides a detailed methodology. Pixel values range from 1 to 7 indicating the frequency of abandonment between 2020 and 2050; values of 1 indicate abandonment only occurred for a five year duration, while pixels with values of 7 were projected to be abandoned for all of 2020-2050.  
 
 Projections of land-use under different SSP scenarios were sourced from:
@@ -123,6 +126,7 @@ pantanal <- biomes %>%
 
 
 ### Brazilian Regions
+
 Here we read in boundary data for Brazil's five regions: North, Northeast, Central-West, Southeast, and South. In addition to performing a country-wide spatial prioritization, we will also find solutions based on different regional management zones. Although our restoration cost data is broken down by biome, budget allocations are divided by States and Municipalities; therefore, a budget constrained prioritization must be conducted along political rather than ecological boundaries. 
 ```{r}
 # read in region boundaries from geobr package
@@ -743,8 +747,8 @@ p1_highBud <- p1 %>%
 ## solve --------------------------
 s1 <- stack(solve(p1_lowBud), solve(p1_highBud))
 # rename rasters in stack
-names(s1)[1] = "ssp1_lowBud"
-names(s1)[2] = "ssp1_highBud"
+names(s1)[1] = "lowBud"
+names(s1)[2] = "highBud"
 
 ## get solution stats --------------
 # returns the number of pus chosen in solution for low budget
@@ -766,8 +770,8 @@ p2_highBud <- p2 %>%
 ## solve --------------------------
 s2 <- stack(solve(p2_lowBud), solve(p2_highBud))
 # rename rasters in stack
-names(s2)[1] = "ssp2_lowBud"
-names(s2)[2] = "ssp2_highBud"
+names(s2)[1] = "lowBud"
+names(s2)[2] = "highBud"
 
 
 ### SSP3 -----------------------------------------------------
@@ -784,8 +788,8 @@ p3_highBud <- p3 %>%
 ## solve --------------------------
 s3 <- stack(solve(p3_lowBud), solve(p3_highBud))
 # rename rasters in stack
-names(s3)[1] = "ssp3_lowBud"
-names(s3)[2] = "ssp3_highBud"
+names(s3)[1] = "lowBud"
+names(s3)[2] = "highBud"
 
 
 ### SSP4 -----------------------------------------------------
@@ -802,8 +806,8 @@ p4_highBud <- p4 %>%
 ## solve --------------------------
 s4 <- stack(solve(p4_lowBud), solve(p4_highBud))
 # rename rasters in stack
-names(s4)[1] = "ssp4_lowBud"
-names(s4)[2] = "ssp4_highBud"
+names(s4)[1] = "lowBud"
+names(s4)[2] = "highBud"
 
 
 ### SSP5 -----------------------------------------------------
@@ -820,8 +824,8 @@ p5_highBud <- p5 %>%
 ## solve --------------------------
 s5 <- stack(solve(p5_lowBud), solve(p5_highBud))
 # rename rasters in stack
-names(s5)[1] = "ssp5_lowBud"
-names(s5)[2] = "ssp5_highBud"
+names(s5)[1] = "lowBud"
+names(s5)[2] = "highBud"
 
 
 ### All SSPs--------------------------------------------------
@@ -838,10 +842,49 @@ p_all_highBud <- p_all %>%
 ## solve --------------------------
 s_all <- stack(solve(p_all_lowBud), solve(p_all_highBud))
 # rename rasters in stack
-names(s_all)[1] = "ssp_all_lowBud"
-names(s_all)[2] = "ssp_all_highBud"
+names(s_all)[1] = "lowBud"
+names(s_all)[2] = "highBud"
+
+
+
+
+##########
+# test if there's a difference with 50% vs 100% relative targets
+
+
+p_all_100 <- problem(ssp_all_pu, ssp_all_feat) %>% 
+  add_relative_targets(c(1, 1)) %>% 
+  add_min_shortfall_objective(budget = 3400) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+s_all_100 <- solve(p_all_100)
 ```
  
+
+What if budget wasn't a factor? Let's see how much biodiversity and carbon features could be met if 12 million ha (Brazil's goal) of land was restored. To do this, we will convert the costs simply to area and feed these planning units into the prioritization. 
+
+```{r}
+#All SSPs with no budget?
+noBud_df <- c(0,5, 1)
+noBud_m <- matrix(noBud_df, ncol = 3, byrow = TRUE)
+
+ssp_all_pu_noBud <- classify(ssp_all_abandoned_crop, noBud_m)
+ssp_all_pu_noBud <- raster(ssp_all_pu_noBud)
+
+p_all_noBud <- problem(ssp_all_pu_noBud, ssp_all_feat) %>% 
+  add_relative_targets(c(1, 1)) %>% 
+  add_min_shortfall_objective(budget = 120000) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+s_all_noBud <- solve(p_all_noBud)
+
+# how many PUs were chosen? answer should be 120,000
+eval_n_summary(p_all_noBud, s_all_noBud)
+# how much of the targets were met?
+eval_target_coverage_summary(p_all_noBud, s_all_noBud)
+```
+
+
 
 
 ### Regional solutions
@@ -1286,29 +1329,6 @@ total_picked <- freq(total_solution)[6,3]
 
 
 
-# Costs ----------------------------------------------------------------------
-## NOTE: these all need to be multiplied by 100 to get cost/km2
-## return cost for each ssp 
-ssp1_cost <- eval_cost_summary(p1, s1)
-ssp2_cost <- eval_cost_summary(p2, s2)
-ssp3_cost <- eval_cost_summary(p3, s3)
-ssp4_cost <- eval_cost_summary(p4, s4)
-ssp5_cost <- eval_cost_summary(p5, s5)
-
-## return cost of total solution
-df2 <- c(0, 4, NA,
-         4, 6, 1)
-m2<- matrix(df2, ncol =3, byrow = TRUE)
-total_solution_overlap <- classify(total_solution, m2, include.lowest  = TRUE)
-
-total_cost <- mask(biomes_cost_rast, total_solution_overlap)
-total_cost_int <- (freq(total_cost)[1,2] * freq(total_cost)[1,3]) + 
-  (freq(total_cost)[2,2] * freq(total_cost)[2,3]) + 
-  (freq(total_cost)[3,2] * freq(total_cost)[3,3]) +
-  (freq(total_cost)[4,2] * freq(total_cost)[4,3]) +
-  (freq(total_cost)[5,2] * freq(total_cost)[5,3])
-
-
 # Zonal Stats------------------------------------------------------------------
 
 
@@ -1322,7 +1342,7 @@ regions_rast_noPant <- mask(regions_rast, pantanal, inverse = TRUE, updatevalue 
 ssp_all_zs_pu_region <- zonal(pu_all, regions_rast, 'sum', na.rm = TRUE)
 
 ## find how many pus were *prioritized* in each biome
-ssp_all_zs_sol_region <- zonal(ssp_all_sol, regions_rast, "sum", na.rm = TRUE)
+ssp_all_zs_sol_region <- zonal(ssp_all_sol_high, regions_rast, "sum", na.rm = TRUE)
 
 
 
@@ -1340,6 +1360,8 @@ ssp2_zs_pu_biome <- zonal(pu2, biomes_rast, "sum", na.rm = TRUE)
 ssp3_zs_pu_biome <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_pu_biome <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_pu_biome <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
+ssp_all_zs_pu_biome <- zonal(pu_all, biomes_rast, 'sum', na.rm = T)
+
 
 ### combine all the counts into one table
 counts_pu_biome <- full_join(ssp1_zs_pu_biome, ssp2_zs_pu_biome, by = "name_biome") %>% 
@@ -1347,12 +1369,44 @@ counts_pu_biome <- full_join(ssp1_zs_pu_biome, ssp2_zs_pu_biome, by = "name_biom
   full_join(ssp4_zs_pu_biome, by = "name_biome") %>% 
   full_join(ssp5_zs_pu_biome, by = "name_biome")
 
+
+
 ### find how many pus were *prioritized* in each biome
-ssp1_zs_sol_biome <- zonal(ssp1_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp2_zs_sol_biome <- zonal(ssp2_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp3_zs_sol_biome <- zonal(ssp3_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp4_zs_sol_biome <- zonal(ssp4_solution, biomes_rast, "sum", na.rm = TRUE)
-ssp5_zs_sol_biome <- zonal(ssp5_solution, biomes_rast, "sum", na.rm = TRUE)
+ssp1_zs_sol_biome <- zonal(ssp1_sol, biomes_rast, "sum", na.rm = TRUE)
+ssp2_zs_sol_biome <- zonal(ssp2_sol, biomes_rast, "sum", na.rm = TRUE)
+ssp3_zs_sol_biome <- zonal(ssp3_sol, biomes_rast, "sum", na.rm = TRUE)
+ssp4_zs_sol_biome <- zonal(ssp4_sol, biomes_rast, "sum", na.rm = TRUE)
+ssp5_zs_sol_biome <- zonal(ssp5_sol, biomes_rast, "sum", na.rm = TRUE)
+ssp_all_zs_sol_biome <- zonal(ssp_all_sol, biomes_rast, "sum", na.rm = TRUE)
+
+#### combine all the counts into one table
+counts_sol_biome <- full_join(ssp1_zs_sol_biome, ssp2_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp3_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp4_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp5_zs_sol_biome, by = "name_biome") %>% 
+  full_join(ssp_all_zs_sol_biome, by = 'name_biome')
+
+
+## find how many features are in each biome
+# convert zero values to nas to mask properly
+ssp_all_sol_high[ssp_all_sol_high == 0] <- NA
+
+ssp_all_bio <- mask(bio_ext_brazil, ssp_all_abandoned_crop)
+ssp_all_carbon <- mask(carbon_brazil, ssp_all_abandoned_crop)
+
+ssp_all_bio_sol <- mask(ssp_all_bio, ssp_all_sol_high, updatevalue = NA)
+ssp_all_carbon_sol <- mask(ssp_all_carbon, ssp_all_sol_high, updatevalue = NA)
+
+ssp_all_zs_bio_biome <- zonal(ssp_all_bio_sol, biomes_rast, 'sum', na.rm = TRUE)
+
+
+
+
+
+
+
+
+
 
 ### combine all the counts into one table
 counts_sol_state <- full_join(ssp1_zs_sol_biome, ssp2_zs_sol_biome, by = "name_biome") %>% 
@@ -1415,7 +1469,7 @@ Info on carbon and biodiversity layers
 # carbon --------------------------------------------------------------------
 
 ## mean total carbon by biome
-carbon_mean <- zonal(carbon_brazil, biomes_rast, "mean", na.rm = TRUE)
+carbon_mean <- zonal(ssp_all_feat, biomes_rast, "mean", na.rm = TRUE)
 
 ## how much carbon can be stored in each biome?
 carbon_sum <- zonal(carbon_brazil, biomes_rast, 'sum', na.rm = TRUE)
