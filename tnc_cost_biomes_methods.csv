@@ -1,0 +1,64 @@
+id,cost_r_ha,cost_usd_ha,biome,biome_code,restoration_method,environmental_conditions
+1,"7,430","1,398",Amazonia,1,total_planting_seedlings,CAF
+2,"17,492","3,290",Amazonia,1,total_planting_seedlings,CAD
+3,"1,642",309,Amazonia,1,conducting_natural_regeneration,CAF
+4,"2,385",449,Amazonia,1,conducting_natural_regeneration,CAD
+5,180,34,Amazonia,1,natural_regeneration,CAF
+6,180,34,Amazonia,1,natural_regeneration,CAD
+7,"2,258",425,Amazonia,1,total_planting_seeds,CAF
+8,"9,116","1,715",Amazonia,1,total_planting_seeds,CAD
+9,"3,191",600,Amazonia,1,densification_enrichment_seedlings,CAF
+10,"6,937","1,305",Amazonia,1,densification_enrichment_seedlings,CAD
+11,"1,120",211,Amazonia,1,densification_enrichment_seeds,CAF
+12,"3,743",704,Amazonia,1,densification_enrichment_seeds,CAD
+13,"7,207","1,356",Caatinga,2,total_planting_seedlings,CAF
+14,"19,948","3,752",Caatinga,2,total_planting_seedlings,CAD
+15,257,48,Caatinga,2,conducting_natural_regeneration,CAF
+16,"2,521",474,Caatinga,2,conducting_natural_regeneration,CAD
+17,181,34,Caatinga,2,natural_regeneration,CAD
+18,"3,848",724,Caatinga,2,densification_enrichment_seedlings,CAF
+19,"12,846","2,416",Caatinga,2,densification_enrichment_seedlings,CAD
+20,"1,069",201,Caatinga,2,densification_enrichment_seeds,CAF
+21,"8,191","1,541",Caatinga,2,densification_enrichment_seeds,CAD
+22,"8,095","1,523",Cerrado,3,total_planting_seedlings,CAF
+23,"22,117","4,160",Cerrado,3,total_planting_seedlings,CAD
+24,"1,522",286,Cerrado,3,conducting_natural_regeneration,CAF
+25,"3,188",600,Cerrado,3,conducting_natural_regeneration,CAD
+26,180,34,Cerrado,3,natural_regeneration,CAD
+27,"8,618","1,621",Cerrado,3,total_planting_seeds,CAF
+28,"27,279","5,131",Cerrado,3,total_planting_seeds,CAD
+29,"3,400",640,Cerrado,3,densification_enrichment_seedlings,CAF
+30,"13,772","2,591",Cerrado,3,densification_enrichment_seedlings,CAD
+31,299,56,Cerrado,3,densification_enrichment_seeds,CAF
+32,"10,131","1,906",Cerrado,3,densification_enrichment_seeds,CAD
+33,"7,788","1,465",Mata Atlantica,4,total_planting_seedlings,CAF
+34,"21,271","4,001",Mata Atlantica,4,total_planting_seedlings,CAD
+35,316,59,Mata Atlantica,4,conducting_natural_regeneration,CAF
+36,"2,940",553,Mata Atlantica,4,conducting_natural_regeneration,CAD
+37,185,35,Mata Atlantica,4,natural_regeneration,CAD
+38,"3,655",688,Mata Atlantica,4,densification_enrichment_seedlings,CAF
+39,"12,723","2,393",Mata Atlantica,4,densification_enrichment_seedlings,CAD
+40,537,101,Mata Atlantica,4,densification_enrichment_seeds,CAF
+41,"6,309","1,187",Mata Atlantica,4,densification_enrichment_seeds,CAD
+42,"5,773","1,086",Pantanal,6,total_planting_seedlings,CAF
+43,"21,201","3,988",Pantanal,6,total_planting_seedlings,CAD
+44,315,59,Pantanal,6,conducting_natural_regeneration,CAF
+45,"1,646",310,Pantanal,6,conducting_natural_regeneration,CAD
+46,"16,358","3,077",Pantanal,6,total_planting_seeds,CAF
+47,"28,492","5,360",Pantanal,6,total_planting_seeds,CAD
+48,"2,221",418,Pantanal,6,densification_enrichment_seedlings,CAF
+49,"10,473","1,970",Pantanal,6,densification_enrichment_seedlings,CAD
+50,379,71,Pantanal,6,densification_enrichment_seeds,CAF
+51,"8,003","1,505",Pantanal,6,densification_enrichment_seeds,CAD
+52,"6,959","1,309",Pampa,5,total_planting_seedlings,CAF
+53,"22,634","4,258",Pampa,5,total_planting_seedlings,CAD
+54,"1,646",310,Pampa,5,conducting_natural_regeneration,CAF
+55,"2,629",495,Pampa,5,conducting_natural_regeneration,CAD
+56,181,34,Pampa,5,natural_regeneration,CAF
+57,181,34,Pampa,5,natural_regeneration,CAD
+58,"12,935","2,433",Pampa,5,total_planting_seeds,CAF
+59,"25,853","4,863",Pampa,5,total_planting_seeds,CAD
+60,"3,398",639,Pampa,5,densification_enrichment_seedlings,CAF
+61,"11,511","2,165",Pampa,5,densification_enrichment_seedlings,CAD
+62,619,116,Pampa,5,densification_enrichment_seeds,CAF
+63,"8,128","1,529",Pampa,5,densification_enrichment_seeds,CAD
