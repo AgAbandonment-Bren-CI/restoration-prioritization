@@ -26,15 +26,9 @@ library(janitor)       # cleaning up dfs
 library(kableExtra)    # tables
 ```
 
-## Overview
-Discuss overall purpose of this analysis. 
+## READ IN & CROP DATA
 
-
-
-## Read in data{.tabset}
-
-First we will read in all the data necessary for formulating and solving the prioritization problem. Broadly, this includes the planning units (locations of projected cropland abandonment), various features (benefits to biodiversity and carbon), and costs of restoration.
-
+First we will read in all the data necessary for formulating and solving the prioritization problem. Broadly, this includes the planning units (locations of projected cropland abandonment), the features (benefits to biodiversity and carbon), and costs of restoration. Additionally, we need to read in data regarding Brazilian administrative and ecological boundaries. These boundaries are used to crop planning unit and feature layers and ensure matching spatial extents and resolutions.
 
 
 ### Cropland Abandonment
@@ -70,15 +64,15 @@ ssp_all_abandoned_crop <- ssp1_reclass + ssp2_reclass + ssp3_reclass + ssp4_recl
 
 
 
-
-
 ### Brazilian Biomes
-The boundary information for Brazilian biomes is read-in using the geobr package. Biome polygons are sourced from the Brazilian Institute of Geography and Statistics (IBGE). This dataset uses 2019 IBGE data at scale 1:250.000.
+
+The boundary information for Brazilian biomes is read-in using the geobr package. Biome polygons are sourced from the Brazilian Institute of Geography and Statistics (IBGE). This dataset uses 2019 IBGE data at scale 1:250.000. Because carbon data is missing for the majority of the pantanal biome, this region is removed from the remaining planning unit and feature layers. 
 
 Source: https://www.ibge.gov.br/geociencias/cartas-e-mapas/informacoes-ambientais/15842-biomas.html?=&t=acesso-ao-produto
 
 ```{r}
 # read in biome boundaries from geobr package
+# NOTE: this may take a while to locally download
 biomes <- read_biomes(
   year = 2019,         #the most recent data available
   simplified = FALSE   #full resolution for boundaries
@@ -124,137 +118,8 @@ pantanal <- biomes %>%
 
 
 
-
-### Brazilian Regions
-
-Here we read in boundary data for Brazil's five regions: North, Northeast, Central-West, Southeast, and South. In addition to performing a country-wide spatial prioritization, we will also find solutions based on different regional management zones. Although our restoration cost data is broken down by biome, budget allocations are divided by States and Municipalities; therefore, a budget constrained prioritization must be conducted along political rather than ecological boundaries. 
-```{r}
-# read in region boundaries from geobr package
-regions <- read_region(
-  year = 2020,         #the most recent data available
-  simplified = FALSE   #full resolution for boundaries
-)
-
-# turn into vector
-regions_vect <- regions %>%  #remove coastal system biome
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()  
-
-# create vectors for each of the regions ------------------------------------
-north <- regions %>% 
-  filter(code_region == 1) %>% 
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()
-
-n_east <- regions %>% 
-  filter(code_region == 2) %>% 
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()
-
-s_east <- regions %>% 
-  filter(code_region == 3) %>% 
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()
-
-south <- regions %>% 
-  filter(code_region == 4) %>% 
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()
-
-cent_west <- regions %>% 
-  filter(code_region == 5) %>% 
-  st_transform(crs = crs(ssp1_abandoned_crop)) %>% 
-  vect()
-```
-
-
-
-
-
-
-
-
-
-
-
-
-### Protected Areas
-This dataset is sourced from the World Database of Protected Areas (WDPA). [MORE INFO LATER]
-
-Source: html
--   NOTE: layer from Cam and Shayan are similar, but slightly different. Moving forward in analysis with Cam's for now, but can change the source later.
-
-```{r}
-wdpa_poly1 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_0/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
-wdpa_poly2 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_1/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
-wdpa_poly3 <- vect("data/inputs/WDPA_WDOECM_Dec2022_Public_BRA_shp_2/WDPA_WDOECM_Dec2022_Public_BRA_shp-polygons.shp")
-
-## set crs of polygons equal to rasters
-crs(wdpa_poly1) = crs(ssp1_abandoned_crop)
-crs(wdpa_poly2) = crs(ssp1_abandoned_crop)
-crs(wdpa_poly2) = crs(ssp1_abandoned_crop)
-
-## convert vects to rasts
-wdpa_rast1 <- rasterize(wdpa_poly1, ssp1_abandoned_crop, field = "WDPA_PID")
-
-
-## ------------------------------------------------
-## read in combined raster
-wdpa <- rast("data/inputs/wdpa_5km_raster.tif")
-
-
-#change biome crs because it's faster than changing crs of global raster
-brazil_trans <- biomes_vect %>% 
-  project(y = crs(wdpa))
-
-# crop PAs to terrestrial Brazil
-wdpa_crop <- wdpa %>% 
-  crop(brazil_trans) %>% 
-  mask(brazil_trans) %>%  
-  #change crs back to match other rasters
-  terra::project(y = crs(biomes_vect)) 
-
-
-# change resolution from 5kmm to roughly 1km
-# to figure out factor that gets res closest to target raster (Chen), use this:
-factor <- ceiling(res(wdpa_crop)[1]/res(ssp1_abandoned_crop)[1])
-factor
-
-# now change resolution using terra:disagg()
-wdpa_disagg <- disagg(wdpa_crop,        #raster 
-                            fact = 5,         #disagg factor
-                            method = "near")  #categorical values (either PA or not)
-
-
-# use resample to make resolutions EXACTLY the same
-wdpa_resamp <- resample(wdpa_disagg, ssp1_abandoned_crop, method = "near")
-
-
-# remove Panatnal biome from WDPA layer
-wdpa_noPant <- mask(wdpa_resamp, pantanal, inverse = TRUE, updatevalue = NA, touches = TRUE)
-
-# finally, change values so that outside PA is N/A and value of PA is 0
-# this is so that the "cost" of these areas are free
-
-## this isn't working!!~!!
-
-wdpa_noPant[wdpa_noPant == 0] <- NA
-wdpa_brazil[wdpa_brazil == 100] <- 0
-```
-
-```{r}
-#how many planning units are in the PAs?
-### doesn't work, returns 0 but there are
-pus1 <- terra::extract(ssp1_abandoned_crop, wdpa_poly1, fun = 'sum', method = 'simple', na.rm = TRUE)
-pus2 <- terra::extract(ssp1_abandoned_crop, wdpa_poly2, fun = 'sum', method = 'simple', na.rm = TRUE)
-pus3 <- terra::extract(ssp1_abandoned_crop, wdpa_poly3, fun = 'sum', method = 'simple', na.rm = TRUE)
-
-plot(wdpa_poly1)
-plot(ssp1_abandoned_crop, col = "black", add = T)
-```
-
-
 ### Carbon
+
 This dataset, originally created by Cook-Patton et al. and updated by Global Forest Watch, estimates the rate of carbon sequestration in aboveground and belowground live biomass during the first 30 years of natural forest regeneration. Spatial sequestration estimates include all forest and savanna biomes in units of MgC/ha/yr at a ~1 km resolution. This carbon data is cropped, masked, and reprojected to match the spatial extent and resolution of other rasters used in the prioritization. Because sequestration data is mostly missing for the Pantanal biome in Brazil, it will be removed from this and all data in the analysis. 
 
 Source: https://data.globalforestwatch.org/documents/gfw::carbon-accumulation-potential-from-natural-forest-regrowth-in-forest-and-savanna-biomes/about
@@ -303,10 +168,8 @@ carbon_brazil <- rast("data/outputs/carbon_seq_rate_Brazil.tif")
 ```
 
 
-### Biodiversity
-Read in biodiversity data. [Info about the data and where it is from. ]
 
-#### Current/Future biodiversity for prioritization use
+### Biodiversity
 
 After reading in the global layer, we will crop it to Brazil and resample to match the resolution of the planning units. Then, we will reclassify the layer to extinction risk values; this will help set tangible goals of minimizing extinction risk. The final raster will be saved locally, allowing the user to simply read in the layer in the future and only run this code-chunk once. 
 
@@ -352,8 +215,10 @@ names(biodiversity_brazil) <- "biodiversity_brazil"
 plot(biodiversity_brazil)
 plot(biomes_vect, add = TRUE)
 
-#export biodiversity_brazil as intermediate raster
-writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Brazil.tif", overwrite = TRUE)
+# export biodiversity_brazil as intermediate raster
+writeRaster(biodiversity_brazil, 
+            "data/outputs/sparc_conservationPriorities_Brazil.tif", 
+            overwrite = TRUE)
 
 
 
@@ -362,8 +227,8 @@ writeRaster(biodiversity_brazil, "data/outputs/sparc_conservationPriorities_Braz
 ## read in values
 extrisk <- read_csv("data/inputs/globalverts_extrisk_scale.csv")
 
-## make three columns for a "from to" reclass
-extrisk3 <- extrisk %>%
+## make three columns for a "from to" interval reclass
+extrisk_interval <- extrisk %>%
   # bring rasterval from previous row down as lower bound
   mutate(from = lag(rasterval), .before = 1) %>% 
   # rename rasterval to indicate upper bound
@@ -372,7 +237,7 @@ extrisk3 <- extrisk %>%
   drop_na 
 
 # turn csv into matrix
-extrisk_m <- data.matrix(extrisk3, rownames.force = NA)
+extrisk_m <- data.matrix(extrisk_interval, rownames.force = NA)
 
 # reclassify raster to extrisk
 bio_ext_brazil <- classify(biodiversity_brazil, extrisk_m, right = TRUE)
@@ -387,36 +252,10 @@ bio_ext_brazil <- rast("data/outputs/biodiversity_extrisk_brazil.tif")
 ```
 
 
-#### Current species richness
-
-We will use the current species richness to compare against our prioritization results. By checking if the areas selected are in the same location as high current species richness, it will help defend the use of the SPARC data. 
-
-```{r}
-aoh_rich <- rast("data/inputs/aoh_verts_richness.tif")
-
-#change biome crs because it's faster than changing crs of global raster
-brazil_trans <- biomes_vect %>% 
-  project(y = crs(aoh_rich))
-
-# crop carbon data to Brazil
-bio_rich <- aoh_rich %>% 
-  crop(brazil_trans) %>% 
-  mask(brazil_trans) %>%  
-  #change crs back to match other rasters
-  terra::project(y = crs(biomes_vect)) 
-
-plot(bio_rich)
-
-# save raster cropped to Brazil
-writeRaster(bio_rich, "data/outputs/aoh_verts_richness_brazil.tif")
-```
-
-
-
 
 ### Cost Layer
-The cost of restoration in Brazil differs with location (by biome), restoration method (six types), and environmental condition of land (favorable or unfavorable). These costs were sourced from a 2017 Nature Conservancy report, written by Rubens de Miranda Benini and Sergio Adeodato. 
 
+The cost of restoration in Brazil differs with location (by biome), restoration method (six types), and environmental condition of land (favorable or unfavorable). These costs were sourced from a 2017 Nature Conservancy report, written by Rubens de Miranda Benini and Sergio Adeodato. 
 ```{r}
 #read in cost data
 costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>% 
@@ -429,13 +268,14 @@ costs <- read_csv("data/inputs/tnc_cost_biomes_methods.csv") %>%
 
 
 
-## Prep data for prioritization
+## PREP DATA FOR PRIORITIZATION
 
-Wrangle data into formats suitable for prioritizr inputs. 
+This section wrangles data into formats suitable for `prioritizr` inputs. 
 
 ### Cost
-Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter` lines of code. 
-Costs are per hectare, so we need to convert it to km^2. Additionally, the costs numbers are too large to use in prioritizr budget, so we need to convert costs to millions per km^2 for ease. 
+
+Select the restoration method and environmental condition you want to investigate for the cost layer. Enter these in the `filter()` lines of code. 
+Costs are per hectare, so we need to convert it to km^2. This makes the cost numbers too large for `prioritizr`, so we need to convert costs to millions per km^2. 
 ```{r}
 # Looking at conducting natural regeneration and "unfavorable environmental conditions" (CAD)
 costs_filtered <- costs %>% 
@@ -461,9 +301,11 @@ biomes_cost_vect <- biomes_cost[-7, ] %>%   #remove coastal system biome
   vect()  
 
 # turn vect into a raster
-biomes_cost_rast <- rasterize(x = biomes_cost_vect,      #vect file to rasterize
-                              y = ssp1_abandoned_crop,   #raster file to provide example crs and spatial extent
-                              field = "cost_mil_r_km")       #values for raster
+biomes_cost_rast <- rasterize(x = biomes_cost_vect,  #vect file to rasterize
+                              #raster file to provide example crs and spatial extent
+                              y = ssp1_abandoned_crop,  
+                              #values for raster
+                              field = "cost_mil_r_km")      
 
 # remove pantanal biome
 biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue = NA)
@@ -472,7 +314,7 @@ biomes_cost_rast <- mask(biomes_cost_rast, pantanal, inverse = TRUE, updatevalue
 
 ### Planning Units
 
-Decide on the restoration method and land status desired to analyze the cost, then merge to assign costs to each planning unit.
+After deciding the restoration method and land status for cost (previous section), assign costs to each planning unit.
 ```{r}
 # mask the cost by biomes to abandoned cropland raster
 # this will isolate pixels of interest (planning units) with associated cost value
@@ -482,70 +324,14 @@ ssp3_pu <- mask(biomes_cost_rast, ssp3_abandoned_crop)
 ssp4_pu <- mask(biomes_cost_rast, ssp4_abandoned_crop)
 ssp5_pu <- mask(biomes_cost_rast, ssp5_abandoned_crop)
 ssp_all_pu <- mask(biomes_cost_rast, ssp_all_abandoned_crop)
-
 ```
 
+`prioritizr` requires rasters to be in "RasterLayer" format, which requires converting rasters from `terra` package format to the `raster` package format. 
 
-#### Regional PUs
-Take our cost-valued planning units and crop/mask them to a given region
+**NOTE:** Often this conversion throws an error when first run (cannot determine the reason). The second time it's run, it may convert raster formats but then drops all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Occasionally this involves re-runing the previous code chunk as well. Double-check that they have converted properly before moving on!
 ```{r}
-## function to crop/mask PUs for a given region
-mask_pu_r <- function(ssp, region) {
-  ssp_pu <- ssp %>% 
-    terra::crop(region, mask = TRUE, touches = TRUE)
-  
-  ssp_pu <- raster(ssp_pu)
-  return(ssp_pu)
-}
-
-## SSP1 ----------------------------------------
-ssp1_pu_n <- mask_pu_r(ssp1_pu, north)
-ssp1_pu_neast <- mask_pu_r(ssp1_pu, n_east)
-ssp1_pu_seast <- mask_pu_r(ssp1_pu, s_east)
-ssp1_pu_s <- mask_pu_r(ssp1_pu, south)
-ssp1_pu_cwest <- mask_pu_r(ssp1_pu, cent_west)
-
-## SSP2 ----------------------------------------
-ssp2_pu_n <- mask_pu_r(ssp2_pu, north)
-ssp2_pu_neast <- mask_pu_r(ssp2_pu, n_east)
-ssp2_pu_seast <- mask_pu_r(ssp2_pu, s_east)
-ssp2_pu_s <- mask_pu_r(ssp2_pu, south)
-ssp2_pu_cwest <- mask_pu_r(ssp2_pu, cent_west)
-
-## SSP3 ----------------------------------------
-ssp3_pu_n <- mask_pu_r(ssp3_pu, north)
-ssp3_pu_neast <- mask_pu_r(ssp3_pu, n_east)
-ssp3_pu_seast <- mask_pu_r(ssp3_pu, s_east)
-ssp3_pu_s <- mask_pu_r(ssp3_pu, south)
-ssp3_pu_cwest <- mask_pu_r(ssp3_pu, cent_west)
-
-## SSP4 ----------------------------------------
-ssp4_pu_n <- mask_pu_r(ssp4_pu, north)
-ssp4_pu_neast <- mask_pu_r(ssp4_pu, n_east)
-ssp4_pu_seast <- mask_pu_r(ssp4_pu, s_east)
-ssp4_pu_s <- mask_pu_r(ssp4_pu, south)
-ssp4_pu_cwest <- mask_pu_r(ssp4_pu, cent_west)
-
-## SSP5 ----------------------------------------
-ssp5_pu_n <- mask_pu_r(ssp5_pu, north)
-ssp5_pu_neast <- mask_pu_r(ssp5_pu, n_east)
-ssp5_pu_seast <- mask_pu_r(ssp5_pu, s_east)
-ssp5_pu_s <- mask_pu_r(ssp5_pu, south)
-ssp5_pu_cwest <- mask_pu_r(ssp5_pu, cent_west)
-
-## SSP All ----------------------------------------
-ssp_all_pu_n <- mask_pu_r(ssp_all_pu, north)
-ssp_all_pu_neast <- mask_pu_r(ssp_all_pu, n_east)
-ssp_all_pu_seast <- mask_pu_r(ssp_all_pu, s_east)
-ssp_all_pu_s <- mask_pu_r(ssp_all_pu, south)
-ssp_all_pu_cwest <- mask_pu_r(ssp_all_pu, cent_west)
-```
-
-
-
-#### Brazil-wide PUs
-Prioritizr requires rasters to be in "RasterLayer" format, which requires converting from a 'terra' package raster to a 'raster' package raster. Sometimes this conversion throws and error (for seemingly no reason). The second time, it may convert but drop all the values. Often you have to run this code chunk 2-3 times before obtaining properly converting RasterLayers for all the planning units. Double-check that they have converted properly before moving on!
-```{r}
+# double-check values before proceeding!!
+# often need to run this 3 times for correct conversion
 ssp1_pu <- raster(ssp1_pu)
 ssp2_pu <- raster(ssp2_pu)
 ssp3_pu <- raster(ssp3_pu)
@@ -560,10 +346,9 @@ ssp_all_pu <- raster(ssp_all_pu)
 
 To evaluate carbon and biodiversity as features in the prioritization problem, they must be merged into a raster stack.
 
-Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different biodiversity and carbon raster for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
+Here we will mask the biodiversity and carbon layers to the planning units available for in each SSP. This will result in feature layers that reflect the total amount that could be achieved by restoring every planning unit. This makes it easier to set relative targets based on what is possible in the prioritization. However, it means creating a different feature stack for each SSP. Below we will create a function to generate the necessary feature data rasters, convert them to a prioritizr-friendly raster format, and then stack them according to SSP. 
 
-#### Brazil-wide features
-Here we'll create the feature raster stacks for country-wide prioritizr problems.
+**NOTE:** As in the previous section, converting raster formats and stacking sometimes returns an error. Double-check the values of the raster stacks before proceeding. This code chunk may need to be run 2-3 times. 
 ```{r}
 ## function will mask Brazil-wide carbon and biodiversity layers
 ## by planning units for each SSP, then stack raster 
@@ -593,112 +378,13 @@ ssp_all_feat <- mask_feat_pu(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_cr
 
 
 
-#### Regional features
-Below we create feature stacks for region-specific prioritizr problems.
-```{r}
-## function to creat feat stack for a given region
-mask_feat_pu_r <- function(carbon, bio, ssp, region) {
-  # mask carbon to SSP and region then convert
-  carbon_pu_ssp <- terra::mask(carbon, ssp)
-  carbon_reg <- terra::crop(carbon_pu_ssp, region, mask = TRUE, touches = TRUE) 
-  carbon_reg <- raster(carbon_reg)
-  # mask biodiversity to SSP then convert
-  bio_pu_ssp <- terra::mask(bio, ssp)
-  bio_reg <- terra::crop(bio_pu_ssp, region, mask = TRUE, touches = TRUE)
-  bio_reg <- raster(bio_reg)
-  # stack the rastLayers
-  feat_reg <- stack(carbon_reg, bio_reg)
-  return(feat_reg)
-}
-
-## SSP1 feat regions 
-ssp1_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, north)
-ssp1_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, n_east)
-ssp1_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, s_east)
-ssp1_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, south)
-ssp1_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp1_abandoned_crop, cent_west)
-
-## SSP2 feat regions 
-ssp2_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, north)
-ssp2_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, n_east)
-ssp2_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, s_east)
-ssp2_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, south)
-ssp2_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp2_abandoned_crop, cent_west)
-
-## SSP3 feat regions 
-ssp3_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, north)
-ssp3_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, n_east)
-ssp3_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, s_east)
-ssp3_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, south)
-ssp3_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp3_abandoned_crop, cent_west)
-
-## SSP4 feat regions 
-ssp4_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, north)
-ssp4_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, n_east)
-ssp4_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, s_east)
-ssp4_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, south)
-ssp4_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp4_abandoned_crop, cent_west)
-
-## SSP5 feat regions 
-ssp5_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, north)
-ssp5_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, n_east)
-ssp5_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, s_east)
-ssp5_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, south)
-ssp5_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp5_abandoned_crop, cent_west)
-
-## SSP all feat regions 
-ssp_all_feat_n <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, north)
-ssp_all_feat_neast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, n_east)
-ssp_all_feat_seast <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, s_east)
-ssp_all_feat_s <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, south)
-ssp_all_feat_cwest <- mask_feat_pu_r(carbon_brazil, bio_ext_brazil, ssp_all_abandoned_crop, cent_west)
 
 
+## PROBLEM FORMULATION
+
+This is where we will start formulating the problem to be solved in prioritizr! A base problem will be created for each SSP using their specific planning units and feature layers. All base problems aim to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget (50%). In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. These relative targets can be set higher (e.g. 100%), but due to increased shortfall and the pressure to minimize it, results may skew more heavily to certain biomes with lower restoration costs. The model sensitivity to relative targets should be considered when using this general methodology for other features or geographic areas. We recommend first ascertaining the relative percent of features that can realistically be restored under a given budget, and using this value to set the relative targets under a minimized shortfall objective. 
 
 
-####### TEST ZONE ####################################################
-## if same target for all zones, can put within matrix fxn
-targ <- matrix(0.2, ncol = 5, nrow = 2)
-## if different, can customize like this for 2 zones
-targ[, 1] <- 0.2
-targ[, 2] <- 0.2
-
-z1 <- zones("zone1" = ssp1_feat_n, "zone2" = ssp1_feat_neast, "zone3" = ssp1_feat_seast,
-            "zone4" = ssp1_feat_s, "zone5" = ssp1_feat_cwest)
-
-test_north <- mask(ssp1_pu, north)
-test_neast <- mask(ssp1_pu, n_east)
-test_seast <- mask(ssp1_pu, s_east)
-test_south <- mask(ssp1_pu, south)
-test_cwest <- mask(ssp1_pu, cent_west)
-
-test_north <- raster(test_north)
-test_neast <- raster(test_neast)
-test_seast <- raster(test_seast)
-test_south <- raster(test_south)
-test_cwest <- raster(test_cwest)
-
-test_pu_stack <- stack(test_north, test_neast, test_seast, test_south, test_cwest)
-
-p_test <- problem(test_pu_stack, z1) %>% 
-  add_min_shortfall_objective(3400) %>% 
-  add_relative_targets(targ) %>% 
-  add_gurobi_solver()
-
-S_test <- solve(p_test)
-
-
-
-```
-
-
-
-
-## Problem Formulations
-
-This is where we will start formulating the problem to be solved in prioritizr! All base problems will aim to minimize target shortfall while staying within a budget. Relative targets are set for carbon and biodiversity, higher than is possible within the budget (50%). In the spatial solution, it will attempt to get as close to this unattainable target as possible while staying within the budget. Different problems will be created to observe how solutions change based on budget (low and high) as well as Brazil-wide vs zonal problems. 
-
-Below, we'll establish base problems for Brazil-wide scenarios.
 ```{r}
 p1 <- problem(ssp1_pu, ssp1_feat) %>% 
   add_relative_targets(c(0.5, 0.5)) %>% 
@@ -726,443 +412,60 @@ p_all <- problem(ssp_all_pu, ssp_all_feat) %>%
 ```
 
 
+### Report outputs
 
-### Brazil-wide solutions
+We can use the base problems to evaluate solutions based on more customizable parameters. 
+For example, in this analysis we evaluated difference in solutions based on available budget, while maintaining and equal weight for the feature layer.
 
-For these problems, the low-end budget is 445.892 million Brazilian Reals. To calculate this amount, we looked at the Environmental management budget of Brazil's Ministry of the Environment. In 2022, Brazil only used 85.8% of the allotted budget. We're curious how much land could be restored with the budget "leftovers". This percentage was used to predict how much money may go unused within the Environmental management budget for 2023: roughly BRL445,862,335. 
+The low-end budget is 445.892 million Brazilian Reals. To calculate this amount, we looked at the Environmental management budget of Brazil's Ministry of the Environment. In 2022, Brazil only used 85.8% of the allotted budget. We're curious how much land could be restored with the budget "leftovers". This percentage was used to predict how much money may go unused within the Environmental management budget for 2023: roughly BRL445,862,335. 
 
-To determine the potential high-end of a budget, we looked toward the Amazon Fund. This fund receives money from organizations and countries around the world and can be used at the discretion of the Brazilian government to conserve and restore land throughout the country. NGOs can utilize this fund for projects within the Amazon biome, but the Federal government can use these funds for projects throughout the country. We'll evaluate how much abandoned cropland could be restored if Brazil utilized the entire budget currently available in the Amazon fund: BRL3,400,000,000.
-```{r}
-### SSP1 -----------------------------------------------------
+To determine the potential high-end of a budget, we looked toward the Amazon Fund. This fund receives money from organizations and countries around the world and can be used at the discretion of the Brazilian government to conserve and restore land throughout the country. NGOs can utilize this fund for projects within the Amazon biome, but the Federal government can use these funds for projects throughout the country. We'll evaluate how much abandoned cropland could be restored if Brazil utilized the entire budget currently available in the Amazon fund: BRL3,400,000,000. As a reminder, costs are converted to units of "millions" so that prioritizr can run correctly.
 
-## create problems --------------
-# country-wide at low budget
-p1_lowBud <- p1 %>% 
-  add_min_shortfall_objective(budget = 445.862) 
+Solutions are output as a rasterstack for each SSP: one layer representing low budget solutions and another layer with the high budget solutions.
 
-# country-wide at high budget
-p1_highBud <- p1 %>% 
-  add_min_shortfall_objective(budget = 3400) 
-
-## solve --------------------------
-s1 <- stack(solve(p1_lowBud), solve(p1_highBud))
-# rename rasters in stack
-names(s1)[1] = "lowBud"
-names(s1)[2] = "highBud"
-
-## get solution stats --------------
-# returns the number of pus chosen in solution for low budget
-#eval_target_coverage_summary(p1_lowBud_c, s1_c$ssp1_lowBud_c)
-# returns amount of features held in solution for low budget
-#eval_target_coverage_summary(p1_lowBud_c, s1_c$ssp1_lowBud_c)
-
-### SSP2 -----------------------------------------------------
-
-## create problems ----------------
-# country-wide at low budget
-p2_lowBud <- p2 %>% 
-  add_min_shortfall_objective(budget = 445.862)
-
-# country-wide at high budget
-p2_highBud <- p2 %>% 
-  add_min_shortfall_objective(budget = 3400) 
-
-## solve --------------------------
-s2 <- stack(solve(p2_lowBud), solve(p2_highBud))
-# rename rasters in stack
-names(s2)[1] = "lowBud"
-names(s2)[2] = "highBud"
-
-
-### SSP3 -----------------------------------------------------
-
-## create problems ----------------
-# country-wide at low budget
-p3_lowBud <- p3 %>% 
-  add_min_shortfall_objective(budget = 445.862)
-
-# country-wide at high budget
-p3_highBud <- p3 %>% 
-  add_min_shortfall_objective(budget = 3400) 
-
-## solve --------------------------
-s3 <- stack(solve(p3_lowBud), solve(p3_highBud))
-# rename rasters in stack
-names(s3)[1] = "lowBud"
-names(s3)[2] = "highBud"
-
-
-### SSP4 -----------------------------------------------------
-
-## create problems ----------------
-# country-wide at low budget
-p4_lowBud <- p4 %>% 
-  add_min_shortfall_objective(budget = 445.862)
-
-# country-wide at high budget
-p4_highBud <- p4 %>% 
-  add_min_shortfall_objective(budget = 3400)
-
-## solve --------------------------
-s4 <- stack(solve(p4_lowBud), solve(p4_highBud))
-# rename rasters in stack
-names(s4)[1] = "lowBud"
-names(s4)[2] = "highBud"
-
-
-### SSP5 -----------------------------------------------------
-
-## create problems ----------------
-# country-wide at low budget
-p5_lowBud <- p5 %>% 
-  add_min_shortfall_objective(budget = 445.862)
-
-# country-wide at high budget
-p5_highBud <- p5 %>% 
-  add_min_shortfall_objective(budget = 3400)
-
-## solve --------------------------
-s5 <- stack(solve(p5_lowBud), solve(p5_highBud))
-# rename rasters in stack
-names(s5)[1] = "lowBud"
-names(s5)[2] = "highBud"
-
-
-### All SSPs--------------------------------------------------
-
-## create problems ----------------
-# country-wide at low budget
-p_all_lowBud <- p_all %>% 
-  add_min_shortfall_objective(budget = 445.862)
-
-# country-wide at high budget
-p_all_highBud <- p_all %>% 
-  add_min_shortfall_objective(budget = 3400) 
-
-## solve --------------------------
-s_all <- stack(solve(p_all_lowBud), solve(p_all_highBud))
-# rename rasters in stack
-names(s_all)[1] = "lowBud"
-names(s_all)[2] = "highBud"
-
-
-
-
-##########
-# test if there's a difference with 50% vs 100% relative targets
-
-
-p_all_100 <- problem(ssp_all_pu, ssp_all_feat) %>% 
-  add_relative_targets(c(1, 1)) %>% 
-  add_min_shortfall_objective(budget = 3400) %>% 
-  add_gurobi_solver(gap = 0.05)
-
-s_all_100 <- solve(p_all_100)
-```
- 
-
-What if budget wasn't a factor? Let's see how much biodiversity and carbon features could be met if 12 million ha (Brazil's goal) of land was restored. To do this, we will convert the costs simply to area and feed these planning units into the prioritization. 
+**NOTE:** For ease this was done by creating a function and applying to all SSP base problems. The down-side is that you cannot easily use prioritizr evaluation functions such as `eval_target_coverage_summary()` because the budget-based problem doesn't exist as an object outside of the function. If you'd like to evaluate summary statistics using these functions in the prioritizr package, there is commented-out example code for how to run this manually outside of the function at the bottom of the code chunk. 
 
 ```{r}
-#All SSPs with no budget?
-noBud_df <- c(0,5, 1)
-noBud_m <- matrix(noBud_df, ncol = 3, byrow = TRUE)
-
-ssp_all_pu_noBud <- classify(ssp_all_abandoned_crop, noBud_m)
-ssp_all_pu_noBud <- raster(ssp_all_pu_noBud)
-
-p_all_noBud <- problem(ssp_all_pu_noBud, ssp_all_feat) %>% 
-  add_relative_targets(c(1, 1)) %>% 
-  add_min_shortfall_objective(budget = 120000) %>% 
-  add_gurobi_solver(gap = 0.05)
-
-s_all_noBud <- solve(p_all_noBud)
-
-# how many PUs were chosen? answer should be 120,000
-eval_n_summary(p_all_noBud, s_all_noBud)
-# how much of the targets were met?
-eval_target_coverage_summary(p_all_noBud, s_all_noBud)
-```
-
-
-
-
-### Regional solutions
-
-Now we will find solutions by breaking the country down by the five regions. We'll create a base problem with a prioritizr function, then use that to find solutions by region and SSP. [info on budget numbers]
-```{r}
-## create fxn for problem creating
-## can't include solving in fxn because eval fxns require calling
-## on both the problem and the solution
-p_func <- function(pu, feat, targ, budget) {
-  p <- prioritizr::problem(pu, feat) %>% 
-    add_relative_targets(targ) %>% 
-    add_min_shortfall_objective(budget) %>% 
-    add_gurobi_solver(gap = 0.05)
-  return(p)
+### Create function --------------------------------------
+## Takes base problem, low and high budgets and then returns raster stack.
+## Uses default values for budgets. Can be changed by user when calling fxn 
+budget_solutions <- function(base_p, low_bud = 445.862, high_bud = 3400) {
+  ## Create problems for low and high budget
+  p_lowBud <- base_p %>% 
+    add_min_shortfall_objective(budget = low_bud)
+  
+  p_highBud <- base_p %>% 
+    add_min_shortfall_objective(budget = high_bud)
+  
+  ## Solve in a stack
+  s <- stack(solve(p_lowBud), solve(p_highBud))
+  
+  ## rename rasters in stack for clarity
+  names(s)[1] = "lowBud"
+  names(s)[2] = "highBud"
+  
+  ## return the stacked solution
+  return(s)
 }
 
-### North Region ---------------------------------------------------------
-## SSP1 
-p1_lowBud_n <- p_func(ssp1_pu_n, ssp1_feat_n, c(0.5, 0.5), 37.91)
-p1_highBud_n <- p_func(ssp1_pu_n, ssp1_feat_n, c(0.5, 0.5), 289.089)
 
-s1_n <- stack(solve(p1_lowBud_n), solve(p1_highBud_n))
-names(s1_n)[1] = "ssp1_lowBud_n"
-names(s1_n)[2] = "ssp1_highBud_n"
+### Run fxn across all SSP base problems ---------------
 
+## SSP1
+s1 <- budget_solutions(p1)
 ## SSP2
-p2_lowBud_n <- p_func(ssp2_pu_n, ssp2_feat_n, c(0.5, 0.5), 37.91)
-p2_highBud_n <- p_func(ssp2_pu_n, ssp2_feat_n, c(0.5, 0.5), 289.089)
-
-s2_n <- stack(solve(p2_lowBud_n), solve(p2_highBud_n))
-names(s2_n)[1] = "ssp2_lowBud_n"
-names(s2_n)[2] = "ssp2_highBud_n"
-
+s2 <- budget_solutions(p2)
 ## SSP3
-p3_lowBud_n <- p_func(ssp3_pu_n, ssp3_feat_n, c(0.5, 0.5), 37.91)
-p3_highBud_n <- p_func(ssp3_pu_n, ssp3_feat_n, c(0.5, 0.5), 289.089)
-
-s3_n <- stack(solve(p3_lowBud_n), solve(p3_highBud_n))
-names(s3_n)[1] = "ssp3_lowBud_n"
-names(s3_n)[2] = "ssp3_highBud_n"
-
-## SSP4 
-p4_lowBud_n <- p_func(ssp4_pu_n, ssp4_feat_n, c(0.5, 0.5), 37.91)
-p4_highBud_n <- p_func(ssp4_pu_n, ssp4_feat_n, c(0.5, 0.5), 289.089)
-
-s4_n <- stack(solve(p4_lowBud_n), solve(p4_highBud_n))
-names(s4_n)[1] = "ssp4_lowBud_n"
-names(s4_n)[2] = "ssp4_highBud_n"
-
+s3 <- budget_solutions(p3)
+## SSP4
+s4 <- budget_solutions(p4)
 ## SSP5
-p5_lowBud_n <- p_func(ssp5_pu_n, ssp5_feat_n, c(0.5, 0.5), 37.91)
-p5_highBud_n <- p_func(ssp5_pu_n, ssp5_feat_n, c(0.5, 0.5), 289.089)
+s5 <- budget_solutions(p5)
+## SSP Overlap
+s_all <- budget_solutions(p_all)
 
-s5_n <- stack(solve(p5_lowBud_n), solve(p5_highBud_n))
-names(s5_n)[1] = "ssp5_lowBud_n"
-names(s5_n)[2] = "ssp5_highBud_n"
-
-## All SSPs
-p_all_lowBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(1, 1), 37.91)
-p_all_highBud_n <- p_func(ssp_all_pu_n, ssp_all_feat_n, c(1, 1), 289.089)
-
-s_all_n <- stack(solve(p_all_lowBud_n), solve(p_all_highBud_n))
-names(s_all_n)[1] = "ssp_all_lowBud_n"
-names(s_all_n)[2] = "ssp_all_highBud_n"
-
-
-### North-east Region ---------------------------------------------------------
-## SSP1 
-p1_lowBud_neast <- p_func(ssp1_pu_neast, ssp1_feat_neast, c(0.5, 0.5), 11.059)
-p1_highBud_neast <- p_func(ssp1_pu_neast, ssp1_feat_neast, c(0.5, 0.5), 84.333)
-
-s1_neast <- stack(solve(p1_lowBud_neast), solve(p1_highBud_neast))
-names(s1_neast)[1] = "ssp1_lowBud_neast"
-names(s1_neast)[2] = "ssp1_highBud_neast"
-
-## SSP2
-p2_lowBud_neast <- p_func(ssp2_pu_neast, ssp2_feat_neast, c(0.5, 0.5), 11.059)
-p2_highBud_neast <- p_func(ssp2_pu_neast, ssp2_feat_neast, c(0.5, 0.5), 84.333)
-
-s2_neast <- stack(solve(p2_lowBud_neast), solve(p2_highBud_neast))
-names(s2_neast)[1] = "ssp2_lowBud_neast"
-names(s2_neast)[2] = "ssp2_highBud_neast"
-
-## SSP3
-p3_lowBud_neast <- p_func(ssp3_pu_neast, ssp3_feat_neast, c(0.5, 0.5), 11.059)
-p3_highBud_neast <- p_func(ssp3_pu_neast, ssp3_feat_neast, c(0.5, 0.5), 84.333)
-
-s3_neast <- stack(solve(p3_lowBud_neast), solve(p3_highBud_neast))
-names(s3_neast)[1] = "ssp3_lowBud_neast"
-names(s3_neast)[2] = "ssp3_highBud_neast"
-
-## SSP4 
-p4_lowBud_neast <- p_func(ssp4_pu_neast, ssp4_feat_neast, c(0.5, 0.5), 11.059)
-p4_highBud_neast <- p_func(ssp4_pu_neast, ssp4_feat_neast, c(0.5, 0.5), 84.333)
-
-s4_neast <- stack(solve(p4_lowBud_neast), solve(p4_highBud_neast))
-names(s4_neast)[1] = "ssp4_lowBud_neast"
-names(s4_neast)[2] = "ssp4_highBud_neast"
-
-## SSP5
-p5_lowBud_neast <- p_func(ssp5_pu_neast, ssp5_feat_neast, c(0.5, 0.5), 11.059)
-p5_highBud_neast <- p_func(ssp5_pu_neast, ssp5_feat_neast, c(0.5, 0.5), 84.333)
-
-s5_neast <- stack(solve(p5_lowBud_neast), solve(p5_highBud_neast))
-names(s5_neast)[1] = "ssp5_lowBud_neast"
-names(s5_neast)[2] = "ssp5_highBud_neast"
-
-## All SSPs
-p_all_lowBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(1, 1), 11.059)
-p_all_highBud_neast <- p_func(ssp_all_pu_neast, ssp_all_feat_neast, c(1, 1), 84.333)
-
-s_all_neast <- stack(solve(p_all_lowBud_neast), solve(p_all_highBud_neast))
-names(s_all_neast)[1] = "ssp_all_lowBud_neast"
-names(s_all_neast)[2] = "ssp_all_highBud_neast"
-
-
-### South-east Region ---------------------------------------------------------
-## SSP1 
-p1_lowBud_seast <- p_func(ssp1_pu_seast, ssp1_feat_seast, c(0.5, 0.5), 0.40956)
-p1_highBud_seast <- p_func(ssp1_pu_seast, ssp1_feat_seast, c(0.5, 0.5), 3.123)
-
-s1_seast <- stack(solve(p1_lowBud_seast), solve(p1_highBud_seast))
-names(s1_seast)[1] = "ssp1_lowBud_seast"
-names(s1_seast)[2] = "ssp1_highBud_seast"
-
-## SSP2
-p2_lowBud_seast <- p_func(ssp2_pu_seast, ssp2_feat_seast, c(0.5, 0.5), 0.40956)
-p2_highBud_seast <- p_func(ssp2_pu_seast, ssp2_feat_seast, c(0.5, 0.5), 3.123)
-
-s2_seast <- stack(solve(p2_lowBud_seast), solve(p2_highBud_seast))
-names(s2_seast)[1] = "ssp2_lowBud_seast"
-names(s2_seast)[2] = "ssp2_highBud_seast"
-
-## SSP3
-p3_lowBud_seast <- p_func(ssp3_pu_seast, ssp3_feat_seast, c(0.5, 0.5), 0.40956)
-p3_highBud_seast <- p_func(ssp3_pu_seast, ssp3_feat_seast, c(0.5, 0.5), 3.123)
-
-s3_seast <- stack(solve(p3_lowBud_seast), solve(p3_highBud_seast))
-names(s3_seast)[1] = "ssp3_lowBud_seast"
-names(s3_seast)[2] = "ssp3_highBud_seast"
-
-## SSP4 
-p4_lowBud_seast <- p_func(ssp4_pu_seast, ssp4_feat_seast, c(0.5, 0.5), 0.40956)
-p4_highBud_seast <- p_func(ssp4_pu_seast, ssp4_feat_seast, c(0.5, 0.5), 3.123)
-
-s4_seast <- stack(solve(p4_lowBud_seast), solve(p4_highBud_seast))
-names(s4_seast)[1] = "ssp4_lowBud_seast"
-names(s4_seast)[2] = "ssp4_highBud_seast"
-
-## SSP5
-p5_lowBud_seast <- p_func(ssp5_pu_seast, ssp5_feat_seast, c(0.5, 0.5), 0.40956)
-p5_highBud_seast <- p_func(ssp5_pu_seast, ssp5_feat_seast, c(0.5, 0.5), 3.123)
-
-s5_seast <- stack(solve(p5_lowBud_seast), solve(p5_highBud_seast))
-names(s5_seast)[1] = "ssp5_lowBud_seast"
-names(s5_seast)[2] = "ssp5_highBud_seast"
-
-## All SSPs
-p_all_lowBud_seast <- p_func(ssp_all_pu_seast, ssp_all_feat_seast, c(1, 1), 0.40956)
-p_all_highBud_seast <- p_func(ssp_all_pu_seast, ssp_all_feat_seast, c(1,1), 3.123)
-
-s <- solve(p_all_highBud_seast)
-
-s_all_seast <- stack(solve(p_all_lowBud_seast), solve(p_all_highBud_seast))
-names(s_all_seast)[1] = "ssp_all_lowBud_seast"
-names(s_all_seast)[2] = "ssp_all_highBud_seast"
-
-
-
-### South Region ---------------------------------------------------------
-## SSP1 
-p1_lowBud_s <- p_func(ssp1_pu_s, ssp1_feat_s, c(0.5, 0.5), 0.036)
-p1_highBud_s <- p_func(ssp1_pu_s, ssp1_feat_s, c(0.5, 0.5), 0.2736)
-
-s1_s <- stack(solve(p1_lowBud_s), solve(p1_highBud_s))
-names(s1_s)[1] = "ssp1_lowBud_s"
-names(s1_s)[2] = "ssp1_highBud_s"
-
-## SSP2
-p2_lowBud_s <- p_func(ssp2_pu_s, ssp2_feat_s, c(0.5, 0.5), 0.036)
-p2_highBud_s <- p_func(ssp2_pu_s, ssp2_feat_s, c(0.5, 0.5), 0.2736)
-
-s2_s <- stack(solve(p2_lowBud_s), solve(p2_highBud_s))
-names(s2_s)[1] = "ssp2_lowBud_s"
-names(s2_s)[2] = "ssp2_highBud_s"
-
-## SSP3
-p3_lowBud_s <- p_func(ssp3_pu_s, ssp3_feat_s, c(0.5, 0.5), 0.036)
-p3_highBud_s <- p_func(ssp3_pu_s, ssp3_feat_s, c(0.5, 0.5), 0.2736)
-
-s3_s <- stack(solve(p3_lowBud_s), solve(p3_highBud_s))
-names(s3_s)[1] = "ssp3_lowBud_s"
-names(s3_s)[2] = "ssp3_highBud_s"
-
-## SSP4 
-p4_lowBud_s <- p_func(ssp4_pu_s, ssp4_feat_s, c(0.5, 0.5), 0.036)
-p4_highBud_s <- p_func(ssp4_pu_s, ssp4_feat_s, c(0.5, 0.5), 0.2736)
-
-s4_s <- stack(solve(p4_lowBud_s), solve(p4_highBud_s))
-names(s4_s)[1] = "ssp4_lowBud_s"
-names(s4_s)[2] = "ssp4_highBud_s"
-
-## SSP5
-p5_lowBud_s <- p_func(ssp5_pu_s, ssp5_feat_s, c(0.5, 0.5), 0.036)
-p5_highBud_s <- p_func(ssp5_pu_s, ssp5_feat_s, c(0.5, 0.5), 0.2736)
-
-s5_s <- stack(solve(p5_lowBud_s), solve(p5_highBud_s))
-names(s5_s)[1] = "ssp5_lowBud_s"
-names(s5_s)[2] = "ssp5_highBud_s"
-
-## All SSPs
-p_all_lowBud_s <- p_func(ssp_all_pu_s, ssp_all_feat_s, c(1, 1), 0.036)
-p_all_highBud_s <- p_func(ssp_all_pu_s, ssp_all_feat_s, c(1, 1), 0.2736)
-
-s_all_s <- stack(solve(p_all_lowBud_s), solve(p_all_highBud_s))
-names(s_all_s)[1] = "ssp_all_lowBud_s"
-names(s_all_s)[2] = "ssp_all_highBud_s"
-
-
-
-### Central-West Region ---------------------------------------------------------
-## SSP1 
-p1_lowBud_cwest <- p_func(ssp1_pu_cwest, ssp1_feat_cwest, c(0.5, 0.5), 0.902)
-p1_highBud_cwest <- p_func(ssp1_pu_cwest, ssp1_feat_cwest, c(0.5, 0.5), 6.878)
-
-s1_cwest <- stack(solve(p1_lowBud_cwest), solve(p1_highBud_cwest))
-names(s1_cwest)[1] = "ssp1_lowBud_cwest"
-names(s1_cwest)[2] = "ssp1_highBud_cwest"
-
-## SSP2
-p2_lowBud_cwest <- p_func(ssp2_pu_cwest, ssp2_feat_cwest, c(0.5, 0.5), 0.902)
-p2_highBud_cwest <- p_func(ssp2_pu_cwest, ssp2_feat_cwest, c(0.5, 0.5), 6.878)
-
-s2_cwest <- stack(solve(p2_lowBud_cwest), solve(p2_highBud_cwest))
-names(s2_cwest)[1] = "ssp2_lowBud_cwest"
-names(s2_cwest)[2] = "ssp2_highBud_cwest"
-
-## SSP3
-p3_lowBud_cwest <- p_func(ssp3_pu_cwest, ssp3_feat_cwest, c(0.5, 0.5), 0.902)
-p3_highBud_cwest <- p_func(ssp3_pu_cwest, ssp3_feat_cwest, c(0.5, 0.5), 6.878)
-
-s3_cwest <- stack(solve(p3_lowBud_cwest), solve(p3_highBud_cwest))
-names(s3_cwest)[1] = "ssp3_lowBud_cwest"
-names(s3_cwest)[2] = "ssp3_highBud_cwest"
-
-## SSP4 
-p4_lowBud_cwest <- p_func(ssp4_pu_cwest, ssp4_feat_cwest, c(0.5, 0.5), 0.902)
-p4_highBud_cwest <- p_func(ssp4_pu_cwest, ssp4_feat_cwest, c(0.5, 0.5), 6.878)
-
-s4_cwest <- stack(solve(p4_lowBud_cwest), solve(p4_highBud_cwest))
-names(s4_cwest)[1] = "ssp4_lowBud_cwest"
-names(s4_cwest)[2] = "ssp4_highBud_cwest"
-
-## SSP5
-p5_lowBud_cwest <- p_func(ssp5_pu_cwest, ssp5_feat_cwest, c(0.5, 0.5), 0.902)
-p5_highBud_cwest <- p_func(ssp5_pu_cwest, ssp5_feat_cwest, c(0.5, 0.5), 6.878)
-
-s5_cwest <- stack(solve(p5_lowBud_cwest), solve(p5_highBud_cwest))
-names(s5_cwest)[1] = "ssp5_lowBud_cwest"
-names(s5_cwest)[2] = "ssp5_highBud_cwest"
-
-## All SSPs
-p_all_lowBud_cwest <- p_func(ssp_all_pu_cwest, ssp_all_feat_cwest, c(1, 1), 0.902)
-p_all_highBud_cwest <- p_func(ssp_all_pu_cwest, ssp_all_feat_cwest, c(1, 1), 6.878)
-
-s_all_cwest <- stack(solve(p_all_lowBud_cwest), solve(p_all_highBud_cwest))
-names(s_all_cwest)[1] = "ssp_all_lowBud_cwest"
-names(s_all_cwest)[2] = "ssp_all_highBud_cwest"
-
-```
-
-
-
-## Saving solution rasters
-```{r}
-## convert RasterLayers solutions back to SpatRast and export
-## these are raster stacks: first layer is low budget and second for high
+### Export solutions ------------------------------------
+## convert RasterLayers solutions back to SpatRast and assign crs
 ssp1_sol <- rast(s1)
 crs(ssp1_sol) = crs(ssp1_abandoned_crop)
 writeRaster(ssp1_sol, "data/outputs/ssp1_solution_country.tif", overwrite = TRUE)
@@ -1186,98 +489,521 @@ writeRaster(ssp5_sol, "data/outputs/ssp5_solution_country.tif", overwrite = TRUE
 ssp_all_sol <- rast(s_all)
 crs(ssp_all_sol) = crs(ssp1_abandoned_crop)
 writeRaster(ssp_all_sol, "data/outputs/ssp_all_solution_country.tif", overwrite = TRUE)
+
+
+# ### SSP1 -----------------------------------------------------
+# 
+# ## create problems --------------
+# # low budget
+# p1_lowBud <- p1 %>% 
+#   add_min_shortfall_objective(budget = 445.862) 
+# 
+# # high budget
+# p1_highBud <- p1 %>% 
+#   add_min_shortfall_objective(budget = 3400) 
+# 
+# ## solve --------------------------
+# s1 <- stack(solve(p1_lowBud), solve(p1_highBud))
+# # rename rasters in stack
+# names(s1)[1] = "lowBud"
+# names(s1)[2] = "highBud"
+
+# ## get solution stats --------------
+# # returns the number of pus chosen in solution for low budget
+# eval_target_coverage_summary(p1_lowBud, s1$lowBud)
+# # returns amount of features held in solution for low budget
+# eval_target_coverage_summary(p1_lowBud, s1$lowBud)
 ```
+ 
 
 
+### Shiny App outputs
 
-Saving some regional stuff (but may not use later)
+For greater user flexibility in our Shiny App (linked in repo README file), we've also generated prioritization results based on different feature weights. These range from weighing biodiversity 5 times greater than carbon, to weighing carbon 5 times greater than biodiversity. As a result, each SSP has 5 solution outputs for a given budget scenario. With a low and high-end budget, each SSP has a total of 10 solutions. These solution rasters are exported to their own directory and utilized for visualization and calculating zonal statistics in the interactive Shiny App. 
+
 ```{r}
-ssp_all_sol_n <- rast(s_all_n)
-crs(ssp_all_sol_n) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_n, "data/outputs/ssp_all_solution_north.tif", overwrite = TRUE)
+## Function to find solutions based on feature weights 
+feat_weights <- function(weights, bud, base_p) {
+  p <- base_p %>% 
+    add_min_shortfall_objective(budget = bud) %>% 
+    add_feature_weights(weights)
+  
+  s <- solve(p)
+  return(s)
+}
 
-ssp_all_sol_neast <- rast(s_all_neast)
-crs(ssp_all_sol_neast) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_neast, "data/outputs/ssp_all_solution_northeast.tif", overwrite = TRUE)
+## SSP1 ------------------------------------------------------------------------
 
-ssp_all_sol_seast <- rast(s_all_seast)
-crs(ssp_all_sol_seast) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_seast, "data/outputs/ssp_all_solution_southeast.tif", overwrite = TRUE)
+## Low budget solutions
+ssp1_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p1)
+ssp1_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p1)
+ssp1_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p1)
+ssp1_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p1)
+ssp1_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p1)
 
-ssp_all_sol_s <- rast(s_all_s)
-crs(ssp_all_sol_s) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_s, "data/outputs/ssp_all_solution_south.tif", overwrite = TRUE)
+# rename rasters
+names(ssp1_lowBud_15) = "ssp1_lowBud_feat_15"
+names(ssp1_lowBud_24) = "ssp1_lowBud_feat_24"
+names(ssp1_lowBud_33) = "ssp1_lowBud_feat_33"
+names(ssp1_lowBud_42) = "ssp1_lowBud_feat_42"
+names(ssp1_lowBud_51) = "ssp1_lowBud_feat_51"
 
-ssp_all_sol_cwest <- rast(s_all_cwest)
-crs(ssp_all_sol_cwest) = crs(ssp1_abandoned_crop)
-writeRaster(ssp_all_sol_cwest, "data/outputs/ssp_all_solution_central_west.tif", overwrite = TRUE)
+# Export
+ssp1_lowBud_15_rast <- rast(ssp1_lowBud_15)
+crs(ssp1_lowBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_lowBud_15_rast, "data/outputs/shiny/ssp1_lowBud_feat15.tif", overwrite = T)
+
+ssp1_lowBud_24_rast <- rast(ssp1_lowBud_24)
+crs(ssp1_lowBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_lowBud_24_rast, "data/outputs/shiny/ssp1_lowBud_feat24.tif", overwrite = T)
+
+ssp1_lowBud_33_rast <- rast(ssp1_lowBud_33)
+crs(ssp1_lowBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_lowBud_33_rast, "data/outputs/shiny/ssp1_lowBud_feat33.tif", overwrite = T)
+
+ssp1_lowBud_42_rast <- rast(ssp1_lowBud_42)
+crs(ssp1_lowBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_lowBud_42_rast, "data/outputs/shiny/ssp1_lowBud_feat42.tif", overwrite = T)
+
+ssp1_lowBud_51_rast <- rast(ssp1_lowBud_51)
+crs(ssp1_lowBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_lowBud_51_rast, "data/outputs/shiny/ssp1_lowBud_feat51.tif", overwrite = T)
+
+
+## High budget
+ssp1_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p1)
+ssp1_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p1)
+ssp1_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p1)
+ssp1_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p1)
+ssp1_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p1)
+
+# rename rasters
+names(ssp1_highBud_15) = "ssp1_highBud_feat15"
+names(ssp1_highBud_24) = "ssp1_highBud_feat24"
+names(ssp1_highBud_33) = "ssp1_highBud_feat33"
+names(ssp1_highBud_42) = "ssp1_highBud_feat42"
+names(ssp1_highBud_51) = "ssp1_highBud_feat51"
+
+# Export
+ssp1_highBud_15_rast <- rast(ssp1_highBud_15)
+crs(ssp1_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_highBud_15_rast, "data/outputs/shiny/ssp1_highBud_feat15.tif", overwrite = T)
+
+ssp1_highBud_24_rast <- rast(ssp1_highBud_24)
+crs(ssp1_highBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_highBud_24_rast, "data/outputs/shiny/ssp1_highBud_feat24.tif", overwrite = T)
+
+ssp1_highBud_33_rast <- rast(ssp1_highBud_33)
+crs(ssp1_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_highBud_33_rast, "data/outputs/shiny/ssp1_highBud_feat33.tif", overwrite = T)
+
+ssp1_highBud_42_rast <- rast(ssp1_highBud_42)
+crs(ssp1_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_highBud_42_rast, "data/outputs/shiny/ssp1_highBud_feat42.tif", overwrite = T)
+
+ssp1_highBud_51_rast <- rast(ssp1_highBud_51)
+crs(ssp1_highBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp1_highBud_51_rast, "data/outputs/shiny/ssp1_highBud_feat51.tif", overwrite = T)
+
+
+
+
+## SSP2 ------------------------------------------------------------------------
+
+## Low budget 
+ssp2_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p2)
+ssp2_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p2)
+ssp2_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p2)
+ssp2_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p2)
+ssp2_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p2)
+
+# rename rasters
+names(ssp2_lowBud_15) = "ssp2_lowBud_feat_15"
+names(ssp2_lowBud_24) = "ssp2_lowBud_feat_24"
+names(ssp2_lowBud_33) = "ssp2_lowBud_feat_33"
+names(ssp2_lowBud_42) = "ssp2_lowBud_feat_42"
+names(ssp2_lowBud_51) = "ssp2_lowBud_feat_51"
+
+# Export
+ssp2_lowBud_15_rast <- rast(ssp2_lowBud_15)
+crs(ssp2_lowBud_15_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_lowBud_15_rast, "data/outputs/shiny/ssp2_lowBud_feat15.tif", overwrite = T)
+
+ssp2_lowBud_24_rast <- rast(ssp2_lowBud_24)
+crs(ssp2_lowBud_24_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_lowBud_24_rast, "data/outputs/shiny/ssp2_lowBud_feat24.tif", overwrite = T)
+
+ssp2_lowBud_33_rast <- rast(ssp2_lowBud_33)
+crs(ssp2_lowBud_33_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_lowBud_33_rast, "data/outputs/shiny/ssp2_lowBud_feat33.tif", overwrite = T)
+
+ssp2_lowBud_42_rast <- rast(ssp2_lowBud_42)
+crs(ssp2_lowBud_42_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_lowBud_42_rast, "data/outputs/shiny/ssp2_lowBud_feat42.tif", overwrite = T)
+
+ssp2_lowBud_51_rast <- rast(ssp2_lowBud_51)
+crs(ssp2_lowBud_51_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_lowBud_51_rast, "data/outputs/shiny/ssp2_lowBud_feat51.tif", overwrite = T)
+
+## High budget
+ssp2_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p2)
+ssp2_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p2)
+ssp2_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p2)
+ssp2_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p2)
+ssp2_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p2)
+
+# rename rasters
+names(ssp2_highBud_15) = "ssp2_highBud_feat15"
+names(ssp2_highBud_24) = "ssp2_highBud_feat24"
+names(ssp2_highBud_33) = "ssp2_highBud_feat33"
+names(ssp2_highBud_42) = "ssp2_highBud_feat42"
+names(ssp2_highBud_51) = "ssp2_highBud_feat51"
+
+# Export
+ssp2_highBud_15_rast <- rast(ssp2_highBud_15)
+crs(ssp2_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp2_highBud_15_rast, "data/outputs/shiny/ssp2_highBud_feat15.tif", overwrite = T)
+
+ssp2_highBud_24_rast <- rast(ssp2_highBud_24)
+crs(ssp2_highBud_24_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_highBud_24_rast, "data/outputs/shiny/ssp2_highBud_feat24.tif", overwrite = T)
+
+ssp2_highBud_33_rast <- rast(ssp2_highBud_33)
+crs(ssp2_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp2_highBud_33_rast, "data/outputs/shiny/ssp2_highBud_feat33.tif", overwrite = T)
+
+ssp2_highBud_42_rast <- rast(ssp2_highBud_42)
+crs(ssp2_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp2_highBud_42_rast, "data/outputs/shiny/ssp2_highBud_feat42.tif", overwrite = T)
+
+ssp2_highBud_51_rast <- rast(ssp2_highBud_51)
+crs(ssp2_highBud_51_rast) <- crs(ssp2_abandoned_crop)
+writeRaster(ssp2_highBud_51_rast, "data/outputs/shiny/ssp2_highBud_feat51.tif", overwrite = T)
+
+
+
+
+## SSP3 ------------------------------------------------------------------------
+
+## Low budget 
+ssp3_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p3)
+ssp3_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p3)
+ssp3_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p3)
+ssp3_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p3)
+ssp3_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p3)
+
+# rename rasters
+names(ssp3_lowBud_15) = "ssp3_lowBud_feat_15"
+names(ssp3_lowBud_24) = "ssp3_lowBud_feat_24"
+names(ssp3_lowBud_33) = "ssp3_lowBud_feat_33"
+names(ssp3_lowBud_42) = "ssp3_lowBud_feat_42"
+names(ssp3_lowBud_51) = "ssp3_lowBud_feat_51"
+
+# Export
+ssp3_lowBud_15_rast <- rast(ssp3_lowBud_15)
+crs(ssp3_lowBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_lowBud_15_rast, "data/outputs/shiny/ssp3_lowBud_feat15.tif", overwrite = T)
+
+ssp3_lowBud_24_rast <- rast(ssp3_lowBud_24)
+crs(ssp3_lowBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_lowBud_24_rast, "data/outputs/shiny/ssp3_lowBud_feat24.tif", overwrite = T)
+
+ssp3_lowBud_33_rast <- rast(ssp3_lowBud_33)
+crs(ssp3_lowBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_lowBud_33_rast, "data/outputs/shiny/ssp3_lowBud_feat33.tif", overwrite = T)
+
+ssp3_lowBud_42_rast <- rast(ssp3_lowBud_42)
+crs(ssp3_lowBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_lowBud_42_rast, "data/outputs/shiny/ssp3_lowBud_feat42.tif", overwrite = T)
+
+ssp3_lowBud_51_rast <- rast(ssp3_lowBud_51)
+crs(ssp3_lowBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_lowBud_51_rast, "data/outputs/shiny/ssp3_lowBud_feat51.tif", overwrite = T)
+
+
+## High budget
+ssp3_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p3)
+ssp3_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p3)
+ssp3_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p3)
+ssp3_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p3)
+ssp3_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p3)
+
+# rename rasters
+names(ssp3_highBud_15) = "ssp3_highBud_feat15"
+names(ssp3_highBud_24) = "ssp3_highBud_feat24"
+names(ssp3_highBud_33) = "ssp3_highBud_feat33"
+names(ssp3_highBud_42) = "ssp3_highBud_feat42"
+names(ssp3_highBud_51) = "ssp3_highBud_feat51"
+
+# Export
+ssp3_highBud_15_rast <- rast(ssp3_highBud_15)
+crs(ssp3_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_highBud_15_rast, "data/outputs/shiny/ssp3_highBud_feat15.tif", overwrite = T)
+
+ssp3_highBud_24_rast <- rast(ssp3_highBud_24)
+crs(ssp3_highBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_highBud_24_rast, "data/outputs/shiny/ssp3_highBud_feat24.tif", overwrite = T)
+
+ssp3_highBud_33_rast <- rast(ssp3_highBud_33)
+crs(ssp3_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_highBud_33_rast, "data/outputs/shiny/ssp3_highBud_feat33.tif", overwrite = T)
+
+ssp3_highBud_42_rast <- rast(ssp3_highBud_42)
+crs(ssp3_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_highBud_42_rast, "data/outputs/shiny/ssp3_highBud_feat42.tif", overwrite = T)
+
+ssp3_highBud_51_rast <- rast(ssp3_highBud_51)
+crs(ssp3_highBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp3_highBud_51_rast, "data/outputs/shiny/ssp3_highBud_feat51.tif", overwrite = T)
+
+
+
+## SSP4 ------------------------------------------------------------------------
+
+## Low budget 
+ssp4_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p4)
+ssp4_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p4)
+ssp4_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p4)
+ssp4_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p4)
+ssp4_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p4)
+
+# rename rasters
+names(ssp4_lowBud_15) = "ssp4_lowBud_feat_15"
+names(ssp4_lowBud_24) = "ssp4_lowBud_feat_24"
+names(ssp4_lowBud_33) = "ssp4_lowBud_feat_33"
+names(ssp4_lowBud_42) = "ssp4_lowBud_feat_42"
+names(ssp4_lowBud_51) = "ssp4_lowBud_feat_51"
+
+# Export
+ssp4_lowBud_15_rast <- rast(ssp4_lowBud_15)
+crs(ssp4_lowBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_lowBud_15_rast, "data/outputs/shiny/ssp4_lowBud_feat15.tif", overwrite = T)
+
+ssp4_lowBud_24_rast <- rast(ssp4_lowBud_24)
+crs(ssp4_lowBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_lowBud_24_rast, "data/outputs/shiny/ssp4_lowBud_feat24.tif", overwrite = T)
+
+ssp4_lowBud_33_rast <- rast(ssp4_lowBud_33)
+crs(ssp4_lowBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_lowBud_33_rast, "data/outputs/shiny/ssp4_lowBud_feat33.tif", overwrite = T)
+
+ssp4_lowBud_42_rast <- rast(ssp4_lowBud_42)
+crs(ssp4_lowBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_lowBud_42_rast, "data/outputs/shiny/ssp4_lowBud_feat42.tif", overwrite = T)
+
+ssp4_lowBud_51_rast <- rast(ssp4_lowBud_51)
+crs(ssp4_lowBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_lowBud_51_rast, "data/outputs/shiny/ssp4_lowBud_feat51.tif", overwrite = T)
+
+
+## High budget
+ssp4_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p4)
+ssp4_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p4)
+ssp4_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p4)
+ssp4_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p4)
+ssp4_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p4)
+
+# rename rasters
+names(ssp4_highBud_15) = "ssp4_highBud_feat15"
+names(ssp4_highBud_24) = "ssp4_highBud_feat24"
+names(ssp4_highBud_33) = "ssp4_highBud_feat33"
+names(ssp4_highBud_42) = "ssp4_highBud_feat42"
+names(ssp4_highBud_51) = "ssp4_highBud_feat51"
+
+# Export
+ssp4_highBud_15_rast <- rast(ssp4_highBud_15)
+crs(ssp4_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_highBud_15_rast, "data/outputs/shiny/ssp4_highBud_feat15.tif", overwrite = T)
+
+ssp4_highBud_24_rast <- rast(ssp4_highBud_24)
+crs(ssp4_highBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_highBud_24_rast, "data/outputs/shiny/ssp4_highBud_feat24.tif", overwrite = T)
+
+ssp4_highBud_33_rast <- rast(ssp4_highBud_33)
+crs(ssp4_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_highBud_33_rast, "data/outputs/shiny/ssp4_highBud_feat33.tif", overwrite = T)
+
+ssp4_highBud_42_rast <- rast(ssp4_highBud_42)
+crs(ssp4_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_highBud_42_rast, "data/outputs/shiny/ssp4_highBud_feat42.tif", overwrite = T)
+
+ssp4_highBud_51_rast <- rast(ssp4_highBud_51)
+crs(ssp4_highBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp4_highBud_51_rast, "data/outputs/shiny/ssp4_highBud_feat51.tif", overwrite = T)
+
+
+## SSP5 ------------------------------------------------------------------------
+
+## Low budget 
+ssp5_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p5)
+ssp5_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p5)
+ssp5_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p5)
+ssp5_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p5)
+ssp5_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p5)
+
+# rename rasters
+names(ssp5_lowBud_15) = "ssp5_lowBud_feat_15"
+names(ssp5_lowBud_24) = "ssp5_lowBud_feat_24"
+names(ssp5_lowBud_33) = "ssp5_lowBud_feat_33"
+names(ssp5_lowBud_42) = "ssp5_lowBud_feat_42"
+names(ssp5_lowBud_51) = "ssp5_lowBud_feat_51"
+
+# Export
+ssp5_lowBud_15_rast <- rast(ssp5_lowBud_15)
+crs(ssp5_lowBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_lowBud_15_rast, "data/outputs/shiny/ssp5_lowBud_feat15.tif", overwrite = T)
+
+ssp5_lowBud_24_rast <- rast(ssp5_lowBud_24)
+crs(ssp5_lowBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_lowBud_24_rast, "data/outputs/shiny/ssp5_lowBud_feat24.tif", overwrite = T)
+
+ssp5_lowBud_33_rast <- rast(ssp5_lowBud_33)
+crs(ssp5_lowBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_lowBud_33_rast, "data/outputs/shiny/ssp5_lowBud_feat33.tif", overwrite = T)
+
+ssp5_lowBud_42_rast <- rast(ssp5_lowBud_42)
+crs(ssp5_lowBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_lowBud_42_rast, "data/outputs/shiny/ssp5_lowBud_feat42.tif", overwrite = T)
+
+ssp5_lowBud_51_rast <- rast(ssp5_lowBud_51)
+crs(ssp5_lowBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_lowBud_51_rast, "data/outputs/shiny/ssp5_lowBud_feat51.tif", overwrite = T)
+
+
+
+
+## High budget
+ssp5_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p5)
+ssp5_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p5)
+ssp5_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p5)
+ssp5_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p5)
+ssp5_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p5)
+
+# rename rasters
+names(ssp5_highBud_15) = "ssp5_highBud_feat15"
+names(ssp5_highBud_24) = "ssp5_highBud_feat24"
+names(ssp5_highBud_33) = "ssp5_highBud_feat33"
+names(ssp5_highBud_42) = "ssp5_highBud_feat42"
+names(ssp5_highBud_51) = "ssp5_highBud_feat51"
+
+# Export
+ssp5_highBud_15_rast <- rast(ssp5_highBud_15)
+crs(ssp5_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_highBud_15_rast, "data/outputs/shiny/ssp5_highBud_feat15.tif", overwrite = T)
+
+ssp5_highBud_24_rast <- rast(ssp5_highBud_24)
+crs(ssp5_highBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_highBud_24_rast, "data/outputs/shiny/ssp5_highBud_feat24.tif", overwrite = T)
+
+ssp5_highBud_33_rast <- rast(ssp5_highBud_33)
+crs(ssp5_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_highBud_33_rast, "data/outputs/shiny/ssp5_highBud_feat33.tif", overwrite = T)
+
+ssp5_highBud_42_rast <- rast(ssp5_highBud_42)
+crs(ssp5_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_highBud_42_rast, "data/outputs/shiny/ssp5_highBud_feat42.tif", overwrite = T)
+
+ssp5_highBud_51_rast <- rast(ssp5_highBud_51)
+crs(ssp5_highBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp5_highBud_51_rast, "data/outputs/shiny/ssp5_highBud_feat51.tif", overwrite = T)
+
+
+## SSP Overlap ----------------------------------------------------------------
+
+## Low budget 
+ssp_all_lowBud_15 <- feat_weights(weights = c(1,5), bud = 445.862, p_all)
+ssp_all_lowBud_24 <- feat_weights(weights = c(2,4), bud = 445.862, p_all)
+ssp_all_lowBud_33 <- feat_weights(weights = c(3,3), bud = 445.862, p_all)
+ssp_all_lowBud_42 <- feat_weights(weights = c(4,2), bud = 445.862, p_all)
+ssp_all_lowBud_51 <- feat_weights(weights = c(5,1), bud = 445.862, p_all)
+
+# rename rasters
+names(ssp_all_lowBud_15) = "ssp_all_lowBud_feat15"
+names(ssp_all_lowBud_24) = "ssp_all_lowBud_feat24"
+names(ssp_all_lowBud_33) = "ssp_all_lowBud_feat33"
+names(ssp_all_lowBud_42) = "ssp_all_lowBud_feat42"
+names(ssp_all_lowBud_51) = "ssp_all_lowBud_feat51"
+
+# Export
+ssp_all_lowBud_15_rast <- rast(ssp_all_lowBud_15)
+crs(ssp_all_lowBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_lowBud_15_rast,
+            "data/outputs/shiny/ssp_all_lowBud_feat15.tif", overwrite = T)
+
+ssp_all_lowBud_24_rast <- rast(ssp_all_lowBud_24)
+crs(ssp_all_lowBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_lowBud_24_rast, 
+            "data/outputs/shiny/ssp_all_lowBud_feat24.tif", overwrite = T)
+
+ssp_all_lowBud_33_rast <- rast(ssp_all_lowBud_33)
+crs(ssp_all_lowBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_lowBud_33_rast,
+            "data/outputs/shiny/ssp_all_lowBud_feat33.tif", overwrite = T)
+
+ssp_all_lowBud_42_rast <- rast(ssp_all_lowBud_42)
+crs(ssp_all_lowBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_lowBud_42_rast, 
+            "data/outputs/shiny/ssp_all_lowBud_feat42.tif", overwrite = T)
+
+ssp_all_lowBud_51_rast <- rast(ssp_all_lowBud_51)
+crs(ssp_all_lowBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_lowBud_51_rast, 
+            "data/outputs/shiny/ssp_all_lowBud_feat51.tif", overwrite = T)
+
+
+
+## High budget
+ssp_all_highBud_15 <- feat_weights(weights = c(1,5), bud = 3400, p_all)
+ssp_all_highBud_24 <- feat_weights(weights = c(2,4), bud = 3400, p_all)
+ssp_all_highBud_33 <- feat_weights(weights = c(3,3), bud = 3400, p_all)
+ssp_all_highBud_42 <- feat_weights(weights = c(4,2), bud = 3400, p_all)
+ssp_all_highBud_51 <- feat_weights(weights = c(5,1), bud = 3400, p_all)
+
+# rename rasters
+names(ssp_all_highBud_15) = "ssp_all_highBud_feat15"
+names(ssp_all_highBud_24) = "ssp_all_highBud_feat24"
+names(ssp_all_highBud_33) = "ssp_all_highBud_feat33"
+names(ssp_all_highBud_42) = "ssp_all_highBud_feat42"
+names(ssp_all_highBud_51) = "ssp_all_highBud_feat51"
+
+# Export
+ssp_all_highBud_15_rast <- rast(ssp_all_highBud_15)
+crs(ssp_all_highBud_15_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_highBud_15_rast,
+            "data/outputs/shiny/ssp_all_highBud_feat15.tif", overwrite = T)
+
+ssp_all_highBud_24_rast <- rast(ssp_all_highBud_24)
+crs(ssp_all_highBud_24_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_highBud_24_rast, 
+            "data/outputs/shiny/ssp_all_highBud_feat24.tif", overwrite = T)
+
+ssp_all_highBud_33_rast <- rast(ssp_all_highBud_33)
+crs(ssp_all_highBud_33_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_highBud_33_rast, 
+            "data/outputs/shiny/ssp_all_highBud_feat33.tif", overwrite = T)
+
+ssp_all_highBud_42_rast <- rast(ssp_all_highBud_42)
+crs(ssp_all_highBud_42_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_highBud_42_rast,
+            "data/outputs/shiny/ssp_all_highBud_feat42.tif", overwrite = T)
+
+ssp_all_highBud_51_rast <- rast(ssp_all_highBud_51)
+crs(ssp_all_highBud_51_rast) <- crs(ssp1_abandoned_crop)
+writeRaster(ssp_all_highBud_51_rast,
+            "data/outputs/shiny/ssp_all_highBud_feat51.tif", overwrite = T)
 ```
 
 
 
-Experimenting with boundary length modifiers:
-What if we do it with BLM of 50?
-```{r, eval= FALSE}
-# SSP1 --------------------------------------------
-p1_blm50 <- problem(ssp1_pu, features) %>% 
-  # minimize cost while ensuring all targets are met
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_boundary_penalties(penalty = 50) %>% 
-  add_gurobi_solver(gap = 0.05)
 
 
-# SSP2 --------------------------------------------
-p2_blm50 <- problem(ssp2_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_boundary_penalties(penalty = 50) %>% 
-  add_gurobi_solver(gap = 0.05) 
 
 
-# SSP3 --------------------------------------------
-p3_blm50 <- problem(ssp3_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_boundary_penalties(penalty = 50) %>% 
-  add_gurobi_solver(gap = 0.05)
 
 
-# SSP4 --------------------------------------------
-p4_blm50 <- problem(ssp4_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_boundary_penalties(penalty = 50) %>% 
-  add_gurobi_solver(gap = 0.05)
+## FURTHER ANALYSES
 
-
-# SSP5 --------------------------------------------
-p5_blm50 <- problem(ssp5_pu, features) %>% 
-  add_min_set_objective() %>% 
-  add_absolute_targets(targets) %>% 
-  add_boundary_penalties(penalty = 50) %>% 
-  add_gurobi_solver(gap = 0.05) 
-
-
-s1_blm50 <- solve(p1)
-
-s2_blm50 <- solve(p2)
-
-s3_blm50 <- solve(p3)
-
-s4_blm50 <- solve(p4)
-
-s5_blm50 <- solve(p5)
-
-```
-
-
-## Further analyses
-
-Here we'll compare the prioritizr solutions with further analyses. 
-Things to-do:
-- create nice table of results
-- update costs
+Below are misc analyses testing different problem formulations and zonal statistics of their outputs. 
 
 ```{r}
 # reclass the planning unit layers so each cell has a value of 1
@@ -1327,26 +1053,13 @@ total_pu <- sum(pu1, pu2, pu3, pu4, pu5)
 ## how many pus were chosen in all five solutions?
 total_picked <- freq(total_solution)[6,3]
 
+```
 
 
+
+```{r}
 # Zonal Stats------------------------------------------------------------------
 
-
-## By Region --------------------------------
-regions_rast <- rasterize(x = regions_vect,
-                          y = ssp1_abandoned_crop,
-                          field = "name_region")
-regions_rast_noPant <- mask(regions_rast, pantanal, inverse = TRUE, updatevalue = NA)
-
-## find how many pus per region
-ssp_all_zs_pu_region <- zonal(pu_all, regions_rast, 'sum', na.rm = TRUE)
-
-## find how many pus were *prioritized* in each biome
-ssp_all_zs_sol_region <- zonal(ssp_all_sol_high, regions_rast, "sum", na.rm = TRUE)
-
-
-
-## By Biome --------------------------------
 ### make raster with biome codes as values
 biomes_rast <- rasterize(x = biomes_vect,
                          y = ssp1_abandoned_crop,
@@ -1361,7 +1074,6 @@ ssp3_zs_pu_biome <- zonal(pu3, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_pu_biome <- zonal(pu4, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_pu_biome <- zonal(pu5, biomes_rast, "sum", na.rm = TRUE)
 ssp_all_zs_pu_biome <- zonal(pu_all, biomes_rast, 'sum', na.rm = T)
-
 
 ### combine all the counts into one table
 counts_pu_biome <- full_join(ssp1_zs_pu_biome, ssp2_zs_pu_biome, by = "name_biome") %>% 
@@ -1378,6 +1090,7 @@ ssp3_zs_sol_biome <- zonal(ssp3_sol, biomes_rast, "sum", na.rm = TRUE)
 ssp4_zs_sol_biome <- zonal(ssp4_sol, biomes_rast, "sum", na.rm = TRUE)
 ssp5_zs_sol_biome <- zonal(ssp5_sol, biomes_rast, "sum", na.rm = TRUE)
 ssp_all_zs_sol_biome <- zonal(ssp_all_sol, biomes_rast, "sum", na.rm = TRUE)
+
 
 #### combine all the counts into one table
 counts_sol_biome <- full_join(ssp1_zs_sol_biome, ssp2_zs_sol_biome, by = "name_biome") %>% 
@@ -1421,6 +1134,11 @@ overlap_zs_pu_biome <- zonal(total_pu, biomes_rast, "sum", na.rm = TRUE)
 
 overlap_zs_sol_biome <- zonal(total_solution_overlap, biomes_rast,"sum", na.rm = TRUE)
 
+
+
+
+
+
 ## By State --------------------------------
 states <- read_state(year = 2020, simplified = FALSE)
 
@@ -1462,6 +1180,54 @@ counts_sol_state <- full_join(ssp1_zs_sol_state, ssp2_zs_sol_state, by = "name_s
   full_join(ssp5_zs_sol_state, by = "name_state")
 ```
 
+
+What if budget wasn't a factor? Let's see how much biodiversity and carbon features could be met if 12 million ha (Brazil's goal) of land was restored. To do this, we will convert the costs simply to area and feed these planning units into the prioritization. 
+
+```{r}
+#All SSPs with no budget?
+noBud_df <- c(0,5, 1)
+noBud_m <- matrix(noBud_df, ncol = 3, byrow = TRUE)
+
+ssp_all_pu_noBud <- classify(ssp_all_abandoned_crop, noBud_m)
+ssp_all_pu_noBud <- raster(ssp_all_pu_noBud)
+
+p_all_noBud <- problem(ssp_all_pu_noBud, ssp_all_feat) %>% 
+  add_relative_targets(c(1, 1)) %>% 
+  add_min_shortfall_objective(budget = 120000) %>% 
+  add_gurobi_solver(gap = 0.05)
+
+s_all_noBud <- solve(p_all_noBud)
+
+# how many PUs were chosen? answer should be 120,000
+eval_n_summary(p_all_noBud, s_all_noBud)
+# how much of the targets were met?
+eval_target_coverage_summary(p_all_noBud, s_all_noBud)
+```
+
+
+```{r}
+
+### TEST CODE
+ssp1_biome_z <- terra::zonal(ssp1_sol$highBud, biomes_rast, 'sum', na.rm = T) %>% 
+  rename(pus = 2)
+ 
+reclass_m = matrix(c(0,1,1), ncol = 3, byrow = TRUE)
+    X_rcl = terra::classify(ssp1_sol$highBud, reclass_m, include.lowest = TRUE)
+
+ssp1_biome_avail <- terra::zonal(X_rcl, biomes_rast, 'sum', na.rm = T) %>% 
+  rename(sol = highBud)
+
+stats_df <- full_join(ssp1_biome_avail, ssp1_biome_z, by = 'name_biome') %>% 
+  pivot_longer(cols = 2:3,
+               names_to = "category",
+               values_to = "amount") %>% 
+  mutate(category = factor(category, 
+                             levels = c('sol', 'pus')))
+
+ggplot(data = stats_df, aes(x = name_biome, y = amount)) +
+  geom_col(aes(fill = category)) +
+  theme_minimal()
+```
 
 
 Info on carbon and biodiversity layers
